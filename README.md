@@ -4,7 +4,7 @@ A views stepshifter model is trained on views data that is shifted relative to t
 
 ## Installation
 
-1. **Intall** ```libomp``` for Mac user because some packages requires extra library. 
+1. **Intall** ```libomp``` for Mac user because some packages (e.g. lightgbm) requires extra library. 
 ```
 brew install libomp
 ```
