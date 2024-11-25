@@ -16,7 +16,7 @@ scikit-learn = "^1.2.2"
 pandas = "^1.5.3"
 numpy = "^1.25.2"
 darts = "^0.30.0"
-lightgbm = "^4.5.0"
+lightgbm = "4.4.0"
 views_forecasts = "^0.5.5"
 
 
