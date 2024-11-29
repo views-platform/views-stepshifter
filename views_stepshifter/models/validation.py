@@ -39,7 +39,7 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
 
 def views_validate(fn):
     @functools.wraps(fn)
-    def inner(*args,**kwargs):
-        dataframe_is_right_format(args[-1])
+    def inner(*args, **kwargs):
+        dataframe_is_right_format(args[1])
         return fn(*args, **kwargs)
     return inner

@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import logging
+from tqdm import tqdm
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class StepshifterModel:
+    _standard_evaluate_length = 12
+
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         self._steps = config['steps']
         self._depvar = config['depvar']
@@ -93,40 +96,16 @@ class StepshifterModel:
 
         self._target_train = [series.slice(self._train_start, self._train_end + 1)[self._depvar]
                               for series in self._series]  # ts.slice is different from df.slice
-        self._past_cov_train = [series.slice(self._train_start, self._train_end + 1)[self._independent_variables]
-                                for series in self._series]
         self._past_cov = [series[self._independent_variables] for series in self._series]
 
-    def _predict_by_step(self, model, step, target):
-        ts_pred = model.predict(n=self._test_end - self._test_start + 1,
-                                series=target,
-                                # darts automatically locates the time period of past_covariates
-                                past_covariates=self._past_cov,
-                                show_warnings=False)
-        
-        # process the predictions
-        index_tuples, df_list = [], []
-        test_period = slice(self._test_start, self._test_end)
-        
-        for pred in ts_pred:
-            df_pred = pred.pd_dataframe().loc[test_period]
-            level = pred.static_covariates.iat[0, 0]
-            index_tuples.extend([(month, level) for month in df_pred.index])
-            df_list.append(df_pred.values)
-
-        df_preds = pd.DataFrame(
-            data=np.concatenate(df_list),
-            index=pd.MultiIndex.from_tuples(index_tuples, names=[self._time, self._level]),
-            columns=[f"step_pred_{step}"]
-        )
-
-        return df_preds.sort_index()
-
-    def _predict_by_step_combined(self, model, step, target):
+    def _predict_by_step(self, step: int, sequence_number: int):
         '''
-        For forecasting only need to keep predictions with last-month-with-data, i.e., diagonal prediction
+        Keep predictions with last-month-with-data, i.e., diagonal prediction
         '''
 
+        target = [series.slice(self._train_start, self._train_end + 1 + sequence_number)[self._depvar]
+                  for series in self._series]  
+        model = self._models[step]
         ts_pred = model.predict(n=step,
                                 series=target,
                                 # darts automatically locates the time period of past_covariates
@@ -136,8 +115,8 @@ class StepshifterModel:
         # process the predictions
         index_tuples, df_list = [], []
         for pred in ts_pred:
-            df_pred = pred.pd_dataframe().loc[[self._test_start + step - 1]]
-            level = pred.static_covariates.iat[0, 0]
+            df_pred = pred.pd_dataframe().loc[[self._test_start + step + sequence_number - 1]]
+            level = int(pred.static_covariates.iat[0, 0])
             index_tuples.extend([(month, level) for month in df_pred.index])
             df_list.append(df_pred.values)
 
@@ -155,28 +134,27 @@ class StepshifterModel:
         self._prepare_time_series(df)
         for step in self._steps:
             model = self._reg(lags_past_covariates=[-step], **self._params)
-            model.fit(self._target_train, past_covariates=self._past_cov_train)
+            model.fit(self._target_train, 
+                      past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
             self._models[step] = model
         self.is_fitted_ = True
 
     @views_validate
-    def predict(self, run_type: str, df: pd.DataFrame) -> pd.DataFrame:
+    def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         df = self._process_data(df)
         check_is_fitted(self, 'is_fitted_')
 
-        if run_type == 'forecasting':
-            pred_by_step = [self._predict_by_step_combined(self._models[step], step, self._target_train) for step in self._steps]
-            pred = pd.concat(pred_by_step, axis=0)
-            # Add the target variable to the predictions to make sure it is a VIEWS prediction
-            # If it is a forecasting run, the target variable is not available in the input data so we fill it with NaN
-            pred[self._depvar] = np.nan
-
-        else:
-            pred_by_step = [self._predict_by_step(self._models[step], step, self._target_train) for step in self._steps]
-            pred = pd.concat(pred_by_step, axis=1)
-            pred = pd.merge(pred, df[self._depvar], left_index=True, right_index=True)
-
-        return pred
+        if run_type != "forecasting":
+            preds = []
+            if eval_type == "standard":
+                for sequence_number in tqdm(range(StepshifterModel._standard_evaluate_length)):
+                    pred_by_step = [self._predict_by_step(step, sequence_number) for step in self._steps]
+                    pred = pd.concat(pred_by_step, axis=0)
+                    preds.append(pred)
+        else: 
+            preds = [self._predict_by_step(step, 0) for step in self._steps]
+            preds = pd.concat(preds, axis=0)
+        return preds
     
     def save(self, path: str):
         try:

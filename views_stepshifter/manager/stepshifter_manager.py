@@ -20,9 +20,27 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPath) -> None:
+    def __init__(self, model_path: ModelPath, eval_type: str = "standard") -> None:
         super().__init__(model_path)
+        self._eval_type = eval_type
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
+    
+    @staticmethod
+    def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Standardize the DataFrame based on the run type
+
+        Args:
+            df: The DataFrame to standardize
+
+        Returns:
+            The standardized DataFrame
+        """
+
+        # post-process: replace negative values with 0
+        df = df.replace([np.inf, -np.inf], 0)
+        df = df.mask(df < 0, 0)
+        return df
 
     def _update_sweep_config(self, args):
         """
@@ -110,7 +128,7 @@ class StepshifterManager(ModelManager):
                     logger.info(f"Sweeping model {self.config['name']}...")
                     model = self._train_model_artifact()
                     logger.info(f"Evaluating model {self.config['name']}...")
-                    self._evaluate_sweep(model)
+                    # self._evaluate_sweep(model)
 
                 if train:
                     logger.info(f"Training model {self.config['name']}...")
@@ -148,29 +166,6 @@ class StepshifterManager(ModelManager):
             model = StepshifterModel(self.config, partitioner_dict)
 
         return model
-    
-    def _get_standardized_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Standardize the DataFrame based on the run type
-
-        Args:
-            df: The DataFrame to standardize
-
-        Returns:
-            The standardized DataFrame
-        """
-
-        run_type = self.config["run_type"]
-        depvar = self.config["depvar"]
-
-        # choose the columns to keep based on the run type and replace negative values with 0
-        if run_type in ["calibration", "testing"]:
-            cols = [depvar] + df.forecasts.prediction_columns
-        elif run_type == "forecasting":
-            cols = ["step_pred_combined", depvar]
-        df = df.replace([np.inf, -np.inf], 0)[cols]
-        df = df.mask(df < 0, 0)
-        return df
     
     def _train_model_artifact(self):
         # print(config)
@@ -219,17 +214,18 @@ class StepshifterManager(ModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
 
-        df = stepshift_model.predict(run_type, df_viewser)
-        df = self._get_standardized_df(df)
+        df_predictions = stepshift_model.predict(df_viewser, run_type, self._eval_type)
+        df_predictions = [StepshifterManager._get_standardized_df(df) for df in df_predictions]
         data_generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         data_fetch_timestamp = read_log_file(path_raw / f"{run_type}_data_fetch_log.txt").get("Data Fetch Timestamp", None)
 
-        _, df_output = generate_output_dict(df, self.config)
-        evaluation, df_evaluation = generate_metric_dict(df, self.config)
-        log_wandb_log_dict(self.config, evaluation)
+        # _, df_output = generate_output_dict(df, self.config)
+        # evaluation, df_evaluation = generate_metric_dict(df, self.config)
+        # log_wandb_log_dict(self.config, evaluation)
 
-        self._save_model_outputs(df_evaluation, df_output, path_generated)
-        self._save_predictions(df, path_generated)
+        # self._save_model_outputs(df_evaluation, df_output, path_generated)
+        for i, df in enumerate(df_predictions):
+            self._save_predictions(df, path_generated, i)
         create_log_file(path_generated, self.config, self.config["timestamp"], data_generation_timestamp, data_fetch_timestamp)
     
     def _forecast_model_artifact(self, artifact_name):
@@ -259,29 +255,29 @@ class StepshifterManager(ModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
 
-        df_predictions = stepshift_model.predict(run_type, df_viewser)
-        df_predictions = self._get_standardized_df(df_predictions)
+        df_predictions = stepshift_model.predict(df_viewser, run_type)
+        df_predictions = StepshifterManager._get_standardized_df(df_predictions)
         data_generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         data_fetch_timestamp = read_log_file(path_raw / f"{run_type}_data_fetch_log.txt").get("Data Fetch Timestamp", None)
 
         self._save_predictions(df_predictions, path_generated)
         create_log_file(path_generated, self.config, self.config["timestamp"], data_generation_timestamp, data_fetch_timestamp)
 
-    def _evaluate_sweep(self, model):
-        path_raw = self._model_path.data_raw
-        run_type = self.config["run_type"]
-        steps = self.config["steps"]
+    # def _evaluate_sweep(self, model):
+    #     path_raw = self._model_path.data_raw
+    #     run_type = self.config["run_type"]
+    #     steps = self.config["steps"]
 
-        df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
-        df = model.predict(run_type, df_viewser)
-        df = self._get_standardized_df(df)
+    #     df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
+    #     df = model.predict(run_type, df_viewser)
+    #     df = self._get_standardized_df(df)
 
-        # Temporarily keep this because the metric to minimize is MSE
-        pred_cols = [f"step_pred_{str(i)}" for i in steps]
-        df["mse"] = df.apply(lambda row: mean_squared_error([row[self.config["depvar"]]] * len(steps),
-                                                            [row[col] for col in pred_cols]), axis=1)
+    #     # Temporarily keep this because the metric to minimize is MSE
+    #     pred_cols = [f"step_pred_{str(i)}" for i in steps]
+    #     df["mse"] = df.apply(lambda row: mean_squared_error([row[self.config["depvar"]]] * len(steps),
+    #                                                         [row[col] for col in pred_cols]), axis=1)
 
-        wandb.log({"MSE": df["mse"].mean()})
+    #     wandb.log({"MSE": df["mse"].mean()})
 
-        evaluation, _ = generate_metric_dict(df, self.config)
-        log_wandb_log_dict(self.config, evaluation)
+    #     evaluation, _ = generate_metric_dict(df, self.config)
+    #     log_wandb_log_dict(self.config, evaluation)
