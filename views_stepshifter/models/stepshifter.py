@@ -98,14 +98,13 @@ class StepshifterModel:
                               for series in self._series]  # ts.slice is different from df.slice
         self._past_cov = [series[self._independent_variables] for series in self._series]
 
-    def _predict_by_step(self, step: int, sequence_number: int):
+    def _predict_by_step(self, model, step: int, sequence_number: int):
         '''
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         '''
 
         target = [series.slice(self._train_start, self._train_end + 1 + sequence_number)[self._depvar]
                   for series in self._series]  
-        model = self._models[step]
         ts_pred = model.predict(n=step,
                                 series=target,
                                 # darts automatically locates the time period of past_covariates
@@ -148,11 +147,11 @@ class StepshifterModel:
             preds = []
             if eval_type == "standard":
                 for sequence_number in tqdm(range(StepshifterModel._standard_evaluate_length)):
-                    pred_by_step = [self._predict_by_step(step, sequence_number) for step in self._steps]
+                    pred_by_step = [self._predict_by_step(self._models[step], step, sequence_number) for step in self._steps]
                     pred = pd.concat(pred_by_step, axis=0)
                     preds.append(pred)
         else: 
-            preds = [self._predict_by_step(step, 0) for step in self._steps]
+            preds = [self._predict_by_step(self._models[step], step, 0) for step in self._steps]
             preds = pd.concat(preds, axis=0)
         return preds
     

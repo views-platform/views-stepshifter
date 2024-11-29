@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 from .stepshifter import StepshifterModel
 from .validation import views_validate
 from views_forecasts.extensions import *
@@ -54,13 +55,13 @@ class HurdleModel(StepshifterModel):
         target_binary = [s.map(lambda x: (x > self._threshold).astype(float)) for s in self._target_train]
 
         # Positive outcome (for cases where target > threshold)
-        target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov_train)
+        target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov)
                                          if (t.values() > self._threshold).any()])
 
         for step in self._steps:
             # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
             binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
-            binary_model.fit(target_binary, past_covariates=self._past_cov_train)
+            binary_model.fit(target_binary, past_covariates=self._past_cov)
 
             # Fit positive stage using the regression model
             positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
@@ -69,26 +70,26 @@ class HurdleModel(StepshifterModel):
         self.is_fitted_ = True
 
     @views_validate
-    def predict(self, run_type: str, df: pd.DataFrame) -> pd.DataFrame:
+    def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         df = self._process_data(df)
         check_is_fitted(self, 'is_fitted_')
 
-        if run_type == 'forecasting':
-            pred_by_step_binary = [self._predict_by_step_combined(self._models[step][0], step, self._target_train) 
-                                   for step in self._steps]
-            pred_by_step_positive = [self._predict_by_step_combined(self._models[step][1], step, self._target_train) 
-                                     for step in self._steps]
-            final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
-            # Add the target variable to the predictions to make sure it is a VIEWS prediction
-            # If it is a forecasting run, the target variable is not available in the input data so we fill it with NaN
-            final_pred[self._depvar] = np.nan
+        if run_type != 'forecasting':
+            final_preds = []
+            if eval_type == "standard":
+                for sequence_number in tqdm(range(StepshifterModel._standard_evaluate_length)):
+                    pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
+                                        for step in self._steps]
+                    pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
+                                            for step in self._steps]
+                    final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+                    final_preds.append(final_pred)
 
         else:
-            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, self._target_train)
+            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, 0)
                                    for step in self._steps]
-            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, self._target_train)
+            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, 0)
                                      for step in self._steps]
-            final_pred = pd.concat(pred_by_step_binary, axis=1) * pd.concat(pred_by_step_positive, axis=1)
-            final_pred = pd.merge(final_pred, df[self._depvar], left_index=True, right_index=True)
+            final_preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
 
-        return final_pred
+        return final_preds
