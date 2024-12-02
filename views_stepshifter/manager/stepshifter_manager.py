@@ -20,9 +20,8 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPath, eval_type: str = "standard") -> None:
+    def __init__(self, model_path: ModelPath) -> None:
         super().__init__(model_path)
-        self._eval_type = eval_type
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
     
     @staticmethod
@@ -128,7 +127,7 @@ class StepshifterManager(ModelManager):
                     logger.info(f"Sweeping model {self.config['name']}...")
                     model = self._train_model_artifact()
                     logger.info(f"Evaluating model {self.config['name']}...")
-                    # self._evaluate_sweep(model)
+                    # self._evaluate_sweep(model, self._eval_type)
 
                 if train:
                     logger.info(f"Training model {self.config['name']}...")
@@ -136,7 +135,7 @@ class StepshifterManager(ModelManager):
 
                 if eval:
                     logger.info(f"Evaluating model {self.config['name']}...")
-                    self._evaluate_model_artifact(artifact_name)
+                    self._evaluate_model_artifact(self._eval_type, artifact_name)
 
                 if forecast:
                     logger.info(f"Forecasting model {self.config['name']}...")
@@ -187,7 +186,7 @@ class StepshifterManager(ModelManager):
             create_log_file(path_generated, self.config, timestamp, None, data_fetch_timestamp)
         return stepshift_model
 
-    def _evaluate_model_artifact(self, artifact_name):
+    def _evaluate_model_artifact(self, eval_type, artifact_name):
         path_raw = self._model_path.data_raw
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
@@ -214,7 +213,7 @@ class StepshifterManager(ModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
 
-        df_predictions = stepshift_model.predict(df_viewser, run_type, self._eval_type)
+        df_predictions = stepshift_model.predict(df_viewser, run_type, eval_type)
         df_predictions = [StepshifterManager._get_standardized_df(df) for df in df_predictions]
         data_generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         data_fetch_timestamp = read_log_file(path_raw / f"{run_type}_data_fetch_log.txt").get("Data Fetch Timestamp", None)
@@ -263,7 +262,7 @@ class StepshifterManager(ModelManager):
         self._save_predictions(df_predictions, path_generated)
         create_log_file(path_generated, self.config, self.config["timestamp"], data_generation_timestamp, data_fetch_timestamp)
 
-    # def _evaluate_sweep(self, model):
+    # def _evaluate_sweep(self, model, eval_type):
     #     path_raw = self._model_path.data_raw
     #     run_type = self.config["run_type"]
     #     steps = self.config["steps"]

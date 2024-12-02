@@ -1,7 +1,5 @@
-import numpy as np
-from tqdm import tqdm
-from .stepshifter import StepshifterModel
-from .validation import views_validate
+from views_stepshifter.models.stepshifter import StepshifterModel
+from views_stepshifter.models.validation import views_validate
 from views_forecasts.extensions import *
 from sklearn.utils.validation import check_is_fitted
 
@@ -77,7 +75,7 @@ class HurdleModel(StepshifterModel):
         if run_type != 'forecasting':
             final_preds = []
             if eval_type == "standard":
-                for sequence_number in tqdm(range(StepshifterModel._standard_evaluate_length)):
+                for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):
                     pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
                                         for step in self._steps]
                     pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 

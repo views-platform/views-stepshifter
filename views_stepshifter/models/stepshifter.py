@@ -5,7 +5,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_forecasts.extensions import *
-from .validation import views_validate
+from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ class StepshifterModel:
         if run_type != "forecasting":
             preds = []
             if eval_type == "standard":
-                for sequence_number in range(ModelManager._standard_evaluate_length):
+                for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):
                     pred_by_step = [self._predict_by_step(self._models[step], step, sequence_number) for step in self._steps]
                     pred = pd.concat(pred_by_step, axis=0)
                     preds.append(pred)
