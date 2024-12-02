@@ -122,7 +122,7 @@ class StepshifterModel:
         df_preds = pd.DataFrame(
             data=np.concatenate(df_list),
             index=pd.MultiIndex.from_tuples(index_tuples, names=[self._time, self._level]),
-            columns=["step_pred_combined"]
+            columns=["step_combined"]
         )
 
         return df_preds.sort_index()
