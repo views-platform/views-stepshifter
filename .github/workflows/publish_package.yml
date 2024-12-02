@@ -30,4 +30,4 @@ jobs:
         python -c "from packaging.version import parse; assert parse('$new_version') > parse('$latest_version'), 'Version must be higher than $latest_version'"
   
     - name: Publish to PyPI
-      run: poetry publish --build --username __token__ --password ${{ secrets.PYPI_TOKEN_STEPSHIFTER }}
+      run: poetry publish --build --username __token__ --password ${{ secrets.PYPI_TOKEN }}
