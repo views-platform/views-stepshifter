@@ -4,3 +4,7 @@
 # Ignore all .pyc and .pyo files
 *.pyc
 *.pyo
+
+*.xml
+*.idea
+*.iml
