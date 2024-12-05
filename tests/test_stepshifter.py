@@ -156,12 +156,8 @@ def test_predict(config, partitioner_dict):
     """
     Test the predict method of the StepshifterModel class.
 
-    This test ensures that the predict method correctly generates predictions 
+    This test ensures that the predict method correctly generates predictions
     based on the input DataFrame and run type.
-
-    Args:
-        config (dict): The configuration dictionary fixture.
-        partitioner_dict (dict): The partitioner dictionary fixture.
 
     Asserts:
         - The predictions are not empty.
@@ -178,9 +174,17 @@ def test_predict(config, partitioner_dict):
 
     model = StepshifterModel(config, partitioner_dict)
     with patch.object(model, '_reg', return_value=MagicMock()) as mock_reg:
+        mock_model_instance = MagicMock()
+        mock_model_instance.predict.return_value = [
+            MagicMock(pd_dataframe=MagicMock(return_value=pd.DataFrame({
+                'step_combined': [0.1, 0.2]
+            }, index=[11, 12])))
+        ]
+        mock_reg.return_value = mock_model_instance
+
         model.fit(df)
-        pred = model.predict('forecasting', df)
-        assert not pred.empty
+        pred = model.predict(df, 'forecasting')
+        assert not pred.empty, "Predictions should not be empty"
 
 def test_save(config, partitioner_dict, tmp_path):
     """
