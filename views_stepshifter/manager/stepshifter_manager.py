@@ -74,20 +74,20 @@ class StepshifterManager(ModelManager):
             A dictionary containing original config, the split classification and regression parameters.
         """
 
-        cls_dict = {}
+        clf_dict = {}
         reg_dict = {}
         config = self.config
 
         for key, value in config.items():
-            if key.startswith("cls_"):
-                cls_key = key.replace("cls_", "")
-                cls_dict[cls_key] = value
+            if key.startswith("clf_"):
+                clf_key = key.replace("clf_", "")
+                clf_dict[clf_key] = value
             elif key.startswith("reg_"):
                 reg_key = key.replace("reg_", "")
                 reg_dict[reg_key] = value
 
-        config["parameters"]["clf"] = cls_dict
-        config["parameters"]["reg"] = reg_dict
+        config["clf"] = clf_dict
+        config["reg"] = reg_dict
 
         return config
 
@@ -121,7 +121,8 @@ class StepshifterManager(ModelManager):
 
                 # W&B does not directly support nested dictionaries for hyperparameters
                 if self.config["sweep"] and self._is_hurdle:
-                    self.config["parameters"] = self._split_hurdle_parameters(self.config)
+                    self.config = self._split_hurdle_parameters()
+                    print(self.config)
 
                 if self.config["sweep"]:
                     logger.info(f"Sweeping model {self.config['name']}...")
