@@ -7,14 +7,12 @@ from views_stepshifter.manager.stepshifter_manager import StepshifterManager
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_pipeline_core.files.utils import create_log_file
 
-
 @pytest.fixture
 def mock_model_path():
     mock_path = MagicMock()
     mock_path.model_dir = "/path/to/models/test_model"
     mock_path.target = "model"
     return mock_path
-
 
 @pytest.fixture
 def mock_config_meta():
@@ -47,7 +45,6 @@ def mock_config_hyperparameters():
             "param2": "value2"
         }
     }
-
 
 @pytest.fixture
 def mock_config_sweep():
@@ -86,16 +83,22 @@ def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_co
         manager = StepshifterManager(mock_model_path)
         return manager
 
-
 def test_stepshifter_manager_init_hurdle(stepshifter_manager_hurdle):
+    """
+    Test initialization of StepshifterManager with HurdleModel.
+    """
     assert stepshifter_manager_hurdle._is_hurdle is True
 
-
 def test_stepshifter_manager_init_non_hurdle(stepshifter_manager):
+    """
+    Test initialization of StepshifterManager with non-HurdleModel.
+    """
     assert stepshifter_manager._is_hurdle is False
 
-
 def test_get_standardized_df():
+    """
+    Test the _get_standardized_df method to ensure it correctly standardizes the DataFrame.
+    """
     df = pd.DataFrame({
         "a": [1.0, -1.0, np.inf, -np.inf, 3.0],
         "b": [4.0, 5.0, -6.0, 7.0, -8.0]
@@ -107,8 +110,10 @@ def test_get_standardized_df():
     result_df = StepshifterManager._get_standardized_df(df)
     pd.testing.assert_frame_equal(result_df, expected_df)
 
-
 def test_update_sweep_config(stepshifter_manager):
+    """
+    Test the _update_sweep_config method to ensure it correctly updates the configuration for a sweep run.
+    """
     args = MagicMock()
     args.run_type = "test_run_type"
     updated_config = stepshifter_manager._update_sweep_config(args)
@@ -118,8 +123,10 @@ def test_update_sweep_config(stepshifter_manager):
     assert updated_config["parameters"]["depvar"]["value"] == "test_depvar"
     assert updated_config["parameters"]["algorithm"]["value"] == "LightGBMModel"
 
-
 def test_split_hurdle_parameters(stepshifter_manager):
+    """
+    Test the _split_hurdle_parameters method to ensure it correctly splits the parameters for HurdleModel.
+    """
     stepshifter_manager.config = {
         "clf_param1": "value1",
         "clf_param2": "value2",
@@ -130,15 +137,13 @@ def test_split_hurdle_parameters(stepshifter_manager):
     assert split_config["clf"] == {"param1": "value1", "param2": "value2"}
     assert split_config["reg"] == {"param1": "value3", "param2": "value4"}
 
-
 def test_get_model(stepshifter_manager, mock_partitioner_dict):
-    
+    """
+    Test the _get_model method to ensure it returns the correct model based on the algorithm specified in the config.
+    """
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
-    
     model = stepshifter_manager._get_model(mock_partitioner_dict)
-
     assert isinstance(model, StepshifterModel)
-
 
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_pipeline_core.files.utils.create_log_file")
@@ -147,6 +152,9 @@ def test_get_model(stepshifter_manager, mock_partitioner_dict):
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=MagicMock)
 def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read_log_file, mock_create_log_file, mock_read_pickle, stepshifter_manager, mock_partitioner_dict):
+    """
+    Test the _train_model_artifact method to ensure it correctly trains and saves the model artifact.
+    """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
@@ -172,12 +180,14 @@ def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read
 
     stepshifter_manager._get_model.return_value.fit.assert_called_once()
     stepshifter_manager._get_model.return_value.save.assert_called_once()
-    
 
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_pipeline_core.files.utils.create_log_file")
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
 def test_train_model_artifact_sweep(mock_datetime, mock_create_log_file, mock_read_pickle, stepshifter_manager, mock_partitioner_dict):
+    """
+    Test the _train_model_artifact method to ensure it correctly trains the model artifact during a sweep run.
+    """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
 
@@ -203,29 +213,22 @@ def test_train_model_artifact_sweep(mock_datetime, mock_create_log_file, mock_re
     stepshifter_manager._get_model.return_value.save.assert_not_called()
     mock_create_log_file.assert_not_called()
 
-
 @patch("builtins.open", new_callable=MagicMock)
 @patch("os.makedirs")
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
 @patch("views_pipeline_core.files.utils.read_log_file")
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._save_predictions")
-def test_evaluate_model_artifact_with_artifact_name(mock_open, 
-                                                    mock_makedirs, 
-                                                    mock_datetime, 
-                                                    mock_read_log_file, 
-                                                    mock_read_pickle, 
-                                                    stepshifter_manager):
+def test_evaluate_model_artifact_with_artifact_name(mock_save_predictions, mock_read_pickle, mock_read_log_file, mock_datetime, mock_makedirs, mock_open, stepshifter_manager):
+    """
+    Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact with a specific artifact name.
+    """
     mock_read_pickle.side_effect = [
-        pd.DataFrame({"a": [1, 2, 3]}), 
-        MagicMock()  
+        pd.DataFrame({"a": [1, 2, 3]}),
+        MagicMock()
     ]
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
-
-    stepshifter_manager._get_model = MagicMock()
-    stepshifter_manager._get_model.return_value = MagicMock()
-    stepshifter_manager._get_model.return_value.predict = MagicMock()
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
@@ -241,8 +244,9 @@ def test_evaluate_model_artifact_with_artifact_name(mock_open,
 
     stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
 
-    # stepshifter_manager._get_model.return_value.predict.assert_called()
-    
+    mock_read_pickle.assert_any_call(stepshifter_manager._model_path.data_raw / "test_run_type_viewser_df.pkl")
+    mock_read_pickle.assert_any_call(stepshifter_manager._model_path.artifacts / "test_artifact.pkl")
+    # mock_save_predictions.assert_called()
 
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_pipeline_core.files.utils.read_log_file")
@@ -250,13 +254,10 @@ def test_evaluate_model_artifact_with_artifact_name(mock_open,
 @patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=MagicMock)
-def test_evaluate_model_artifact_without_artifact_name(mock_open, 
-                                                       mock_makedirs, 
-                                                       mock_get_latest_model_artifact, 
-                                                       mock_datetime, 
-                                                       mock_read_log_file, 
-                                                       mock_read_pickle, 
-                                                       stepshifter_manager):
+def test_evaluate_model_artifact_without_artifact_name(mock_open, mock_makedirs, mock_get_latest_model_artifact, mock_datetime, mock_read_log_file, mock_read_pickle, stepshifter_manager):
+    """
+    Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact without a specific artifact name.
+    """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}),  
         MagicMock() 
@@ -270,23 +271,13 @@ def test_evaluate_model_artifact_without_artifact_name(mock_open,
     stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
-    stepshifter_manager._get_model = MagicMock()
-    stepshifter_manager._get_model.return_value = MagicMock()
-    stepshifter_manager._get_model.return_value.predict = MagicMock(
-        return_value=pd.DataFrame({"predictions": [0.1, 0.2, 0.3]})
-    )
-
-    artifact_name = None
-    eval_type = "test_eval_type"
-
     mock_makedirs.return_value = None
     mock_open.return_value.__enter__.return_value = MagicMock()
 
-    stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
+    stepshifter_manager._evaluate_model_artifact("test_eval_type", None)
 
     mock_read_pickle.assert_any_call(stepshifter_manager._model_path.data_raw / "test_run_type_viewser_df.pkl")
     mock_read_pickle.assert_any_call(mock_get_latest_model_artifact.return_value)
-
 
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_pipeline_core.files.utils.create_log_file")
@@ -295,14 +286,10 @@ def test_evaluate_model_artifact_without_artifact_name(mock_open,
 @patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=MagicMock)
-def test_forecast_model_artifact_with_artifact_name(mock_open, 
-                                                    mock_makedirs, 
-                                                    mock_get_latest_model_artifact, 
-                                                    mock_datetime, 
-                                                    mock_read_log_file, 
-                                                    mock_create_log_file, 
-                                                    mock_read_pickle, 
-                                                    stepshifter_manager):
+def test_forecast_model_artifact_with_artifact_name(mock_open, mock_makedirs, mock_get_latest_model_artifact, mock_datetime, mock_read_log_file, mock_create_log_file, mock_read_pickle, stepshifter_manager):
+    """
+    Test the _forecast_model_artifact method to ensure it correctly forecasts using a specific model artifact.
+    """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}), 
         MagicMock()  
@@ -335,7 +322,6 @@ def test_forecast_model_artifact_with_artifact_name(mock_open,
     mock_read_pickle.assert_any_call(stepshifter_manager._model_path.data_raw / "test_run_type_viewser_df.pkl")
     mock_read_pickle.assert_any_call(stepshifter_manager._model_path.artifacts / "test_artifact.pkl")
 
-
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_pipeline_core.files.utils.create_log_file")
 @patch("views_pipeline_core.files.utils.read_log_file")
@@ -343,16 +329,10 @@ def test_forecast_model_artifact_with_artifact_name(mock_open,
 @patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=MagicMock)
-def test_forecast_model_artifact_without_artifact_name(
-    mock_open, 
-    mock_makedirs, 
-    mock_get_latest_model_artifact, 
-    mock_datetime, 
-    mock_read_log_file, 
-    mock_create_log_file, 
-    mock_read_pickle, 
-    stepshifter_manager
-):
+def test_forecast_model_artifact_without_artifact_name(mock_open, mock_makedirs, mock_get_latest_model_artifact, mock_datetime, mock_read_log_file, mock_create_log_file, mock_read_pickle, stepshifter_manager):
+    """
+    Test the _forecast_model_artifact method to ensure it correctly forecasts using the latest model artifact when no specific artifact name is provided.
+    """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}), 
         MagicMock()  
@@ -382,19 +362,3 @@ def test_forecast_model_artifact_without_artifact_name(
 
     mock_read_pickle.assert_any_call(stepshifter_manager._model_path.data_raw / "test_run_type_viewser_df.pkl")
     mock_read_pickle.assert_any_call(mock_get_latest_model_artifact.return_value)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
