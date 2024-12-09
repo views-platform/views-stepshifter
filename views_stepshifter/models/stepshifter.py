@@ -53,7 +53,7 @@ class StepshifterModel:
         '''
 
         if config["sweep"]:
-            keys_to_remove = ["algorithm", "depvar", "steps", "sweep", "run_type", "model_cls", "model_reg", "name"]
+            keys_to_remove = ["algorithm", "depvar", "steps", "sweep", "run_type", "model_clf", "model_reg", "name"]
             parameters = {k: v for k, v in config.items() if k not in keys_to_remove}
         else:
             parameters = config["parameters"]
