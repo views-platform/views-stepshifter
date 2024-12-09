@@ -123,17 +123,17 @@ def test_update_sweep_config(stepshifter_manager):
     assert updated_config["parameters"]["depvar"]["value"] == "test_depvar"
     assert updated_config["parameters"]["algorithm"]["value"] == "LightGBMModel"
 
-def test_split_hurdle_parameters(stepshifter_manager):
+def test_split_hurdle_parameters(stepshifter_manager_hurdle):
     """
     Test the _split_hurdle_parameters method to ensure it correctly splits the parameters for HurdleModel.
     """
-    stepshifter_manager.config = {
+    stepshifter_manager_hurdle.config = {
         "clf_param1": "value1",
         "clf_param2": "value2",
         "reg_param1": "value3",
         "reg_param2": "value4"
     }
-    split_config = stepshifter_manager._split_hurdle_parameters()
+    split_config = stepshifter_manager_hurdle._split_hurdle_parameters()
     assert split_config["clf"] == {"param1": "value1", "param2": "value2"}
     assert split_config["reg"] == {"param1": "value3", "param2": "value4"}
 
@@ -167,9 +167,9 @@ def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read
     stepshifter_manager._get_model.return_value.fit = MagicMock()
     stepshifter_manager._get_model.return_value.save = MagicMock()
 
-    stepshifter_manager._model_path.data_raw = MagicMock()
+    stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = "/mock/path/to/generated"
-    stepshifter_manager._model_path.artifacts = MagicMock()
+    stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
 
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
