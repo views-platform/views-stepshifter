@@ -240,8 +240,8 @@ class StepshifterManager(ModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith("pkl"):
-                artifact_name += "pkl"
+            if not artifact_name.endswith(".pkl"):
+                artifact_name += ".pkl"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
