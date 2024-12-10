@@ -30,7 +30,7 @@ def partitioner_dict():
     """
     return {
         'train': [0, 10],
-        'predict': [11, 20]
+        'test': [11, 20]
     }
 
 def test_resolve_estimator():
@@ -63,7 +63,7 @@ def test_get_parameters(config):
     Asserts:
         - The extracted parameters match the expected parameters.
     """
-    model = StepshifterModel(config, {'train': [0, 10], 'predict': [11, 20]})
+    model = StepshifterModel(config, {'train': [0, 10], 'test': [11, 20]})
     params = model._get_parameters(config)
     assert params == {'param1': 1, 'param2': 2}
 
