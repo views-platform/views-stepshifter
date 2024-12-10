@@ -58,7 +58,7 @@ def mock_config_sweep():
 def mock_partitioner_dict():
     return {
         "train": [0, 10],
-        "predict": [11, 20]
+        "test": [11, 20]
     }
 
 @pytest.fixture
@@ -233,7 +233,7 @@ def test_evaluate_model_artifact_with_artifact_name(mock_open, mock_makedirs, mo
     """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}),
-        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "predict": [11, 20]})
+        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "test": [11, 20]})
     ]
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
@@ -251,7 +251,7 @@ def test_evaluate_model_artifact_with_artifact_name(mock_open, mock_makedirs, mo
     artifact_name = "test_artifact"
     eval_type = "test_eval_type"
 
-    mock_stepshift_model = StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "predict": [11, 20]})
+    mock_stepshift_model = StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "test": [11, 20]})
     mock_stepshift_model.predict = MagicMock(return_value=pd.DataFrame({"predictions": [0.1, 0.2, 0.3]}))
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}),
@@ -277,7 +277,7 @@ def test_evaluate_model_artifact_without_artifact_name(mock_open, mock_makedirs,
     """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}),  
-        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "predict": [11, 20]})
+        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "test": [11, 20]})
     ]
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
@@ -321,7 +321,7 @@ def test_forecast_model_artifact_with_artifact_name(mock_open, mock_makedirs, mo
     """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}), 
-        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "predict": [11, 20]})
+        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "test": [11, 20]})
     ]
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
@@ -367,7 +367,7 @@ def test_forecast_model_artifact_without_artifact_name(mock_open, mock_makedirs,
     """
     mock_read_pickle.side_effect = [
         pd.DataFrame({"a": [1, 2, 3]}), 
-        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "predict": [11, 20]})
+        StepshifterModel(config={"steps": [1, 2, 3], "depvar": "test_depvar", "model_reg": "LightGBMModel", "parameters": {}, "sweep": False}, partitioner_dict={"train": [0, 10], "test": [11, 20]})
     ]
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
