@@ -19,7 +19,7 @@ def sample_config():
 
 @pytest.fixture
 def sample_partitioner_dict():
-    return {"train": [0, 10], "predict": [11, 20]}
+    return {"train": [0, 10], "test": [11, 20]}
 
 
 @pytest.fixture
