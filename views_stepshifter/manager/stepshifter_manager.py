@@ -14,6 +14,9 @@ import time
 import wandb
 from datetime import datetime
 from sklearn.metrics import mean_squared_error
+from views_pipeline_core.files.utils import read_dataframe
+from views_pipeline_core.configs.pipeline import PipelineConfig
+import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +176,7 @@ class StepshifterManager(ModelManager):
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
-        df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
+        df_viewser = read_dataframe(path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}")
 
         partitioner_dict = self._data_loader.partition_dict
         stepshift_model = self._get_model(partitioner_dict)
@@ -181,7 +184,7 @@ class StepshifterManager(ModelManager):
 
         if not self.config["sweep"]:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_filename = ModelManager._generate_model_file_name(run_type, timestamp)
+            model_filename = ModelManager._generate_model_file_name(run_type, timestamp, file_extension=".pkl")
             stepshift_model.save(path_artifacts / model_filename)
             data_fetch_timestamp = read_log_file(path_raw / f"{run_type}_data_fetch_log.txt").get("Data Fetch Timestamp", None)
             create_log_file(path_generated, self.config, timestamp, None, data_fetch_timestamp)
@@ -198,8 +201,8 @@ class StepshifterManager(ModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(".pkl"):
-                artifact_name += ".pkl"
+            if not artifact_name.endswith(f"{PipelineConfig.dataframe_format}"):
+                artifact_name += f"{PipelineConfig.dataframe_format}"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -207,12 +210,10 @@ class StepshifterManager(ModelManager):
             path_artifact = self._get_latest_model_artifact(path_artifacts, run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-        df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
+        df_viewser = read_dataframe(path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}")
 
-        try:
-            stepshift_model = pd.read_pickle(path_artifact)
-        except FileNotFoundError:
-            logger.exception(f"Model artifact not found at {path_artifact}")
+        with open(path_artifact, 'rb') as f:
+            stepshift_model = pickle.load(f)
 
         df_predictions = stepshift_model.predict(df_viewser, run_type, eval_type)
         df_predictions = [StepshifterManager._get_standardized_df(df) for df in df_predictions]
@@ -239,8 +240,8 @@ class StepshifterManager(ModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(".pkl"):
-                artifact_name += ".pkl"
+            if not artifact_name.endswith(f"{PipelineConfig.dataframe_format}"):
+                artifact_name += f"{PipelineConfig.dataframe_format}"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -248,10 +249,11 @@ class StepshifterManager(ModelManager):
             path_artifact = self._get_latest_model_artifact(path_artifacts, run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-        df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
+        df_viewser = read_dataframe(path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}")
 
         try:
-            stepshift_model = pd.read_pickle(path_artifact)
+            with open(path_artifact, 'rb') as f:
+                stepshift_model = pickle.load(f)
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
 
@@ -268,7 +270,7 @@ class StepshifterManager(ModelManager):
     #     run_type = self.config["run_type"]
     #     steps = self.config["steps"]
 
-    #     df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df.pkl")
+    #     df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}")
     #     df = model.predict(run_type, df_viewser)
     #     df = self._get_standardized_df(df)
 
