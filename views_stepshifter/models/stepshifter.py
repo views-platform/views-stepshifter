@@ -19,7 +19,7 @@ class StepshifterModel:
         self._reg = self._resolve_estimator(config['model_reg'])
         self._params = self._get_parameters(config)
         self._train_start, self._train_end = partitioner_dict['train']
-        self._test_start, self._test_end = partitioner_dict['predict']
+        self._test_start, self._test_end = partitioner_dict['test']
         self._models = {}
     
     @staticmethod
