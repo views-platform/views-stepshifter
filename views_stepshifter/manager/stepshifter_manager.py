@@ -201,8 +201,8 @@ class StepshifterManager(ModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(f"{PipelineConfig.dataframe_format}"):
-                artifact_name += f"{PipelineConfig.dataframe_format}"
+            if not artifact_name.endswith(f".pkl"):
+                artifact_name += f".pkl"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -240,8 +240,8 @@ class StepshifterManager(ModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(f"{PipelineConfig.dataframe_format}"):
-                artifact_name += f"{PipelineConfig.dataframe_format}"
+            if not artifact_name.endswith(f".pkl"):
+                artifact_name += f".pkl"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
