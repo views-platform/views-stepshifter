@@ -1,5 +1,4 @@
-from views_pipeline_core.managers.model_manager import ModelManager
-from views_pipeline_core.managers.path_manager import ModelPath
+from views_pipeline_core.managers.model import ModelPathManager, ModelManager
 from views_pipeline_core.models.outputs import generate_output_dict
 from views_pipeline_core.files.utils import read_log_file, create_log_file
 from views_pipeline_core.wandb.utils import add_wandb_monthly_metrics, generate_wandb_log_dict, log_wandb_log_dict
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPath) -> None:
+    def __init__(self, model_path: ModelPathManager) -> None:
         super().__init__(model_path)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
     
