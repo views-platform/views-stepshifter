@@ -6,7 +6,7 @@ from views_pipeline_core.wandb.utils import add_wandb_monthly_metrics, generate_
 from views_pipeline_core.evaluation.metrics import generate_metric_dict
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
-from views_forecasts.extensions import *
+# from views_forecasts.extensions import *
 import logging
 import pandas as pd
 import numpy as np

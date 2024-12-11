@@ -2,7 +2,6 @@ import functools
 import numpy as np
 import pandas as pd
 import logging
-from views_forecasts.extensions import *
 
 logger = logging.getLogger(__name__)
 
