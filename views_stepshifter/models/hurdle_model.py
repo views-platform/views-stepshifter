@@ -3,6 +3,7 @@ from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
 import pandas as pd
+from typing import List, Dict
 
 
 class HurdleModel(StepshifterModel):
