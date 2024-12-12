@@ -30,7 +30,7 @@ jobs:
 
     - name: Validate Version
       run: |
-        latest_version=$(curl -s https://pypi.org/pypi/views-pipeline-core/json | jq -r .info.version)
+        latest_version=$(curl -s https://pypi.org/pypi/views-stepshifter/json | jq -r .info.version)
         new_version=$(python -c "import toml; print(toml.load('pyproject.toml')['tool']['poetry']['version'])")
         python -c "from packaging.version import parse; assert parse('$new_version') > parse('$latest_version'), 'Version must be higher than $latest_version'"
   
