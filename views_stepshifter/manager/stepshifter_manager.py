@@ -17,12 +17,9 @@ from views_stepshifter.models.hurdle_model import HurdleModel
 
 # from views_forecasts.extensions import *
 import logging
-import time
 import pickle
-from datetime import datetime
 import pandas as pd
 import numpy as np
-import wandb
 from sklearn.metrics import mean_squared_error
 
 logger = logging.getLogger(__name__)
@@ -105,63 +102,6 @@ class StepshifterManager(ModelManager):
 
         return config
 
-    # def _execute_model_tasks(self, config=None, train=None, eval=None, forecast=None, artifact_name=None):
-    #     """
-    #     Executes various model-related tasks including training, evaluation, and forecasting.
-
-    #     This function manages the execution of different tasks such as training the model,
-    #     evaluating an existing model, or performing forecasting.
-    #     It also initializes the WandB project.
-
-    #     Args:
-    #         config: Configuration object containing parameters and settings.
-    #         project: The WandB project name.
-    #         train: Flag to indicate if the model should be trained.
-    #         eval: Flag to indicate if the model should be evaluated.
-    #         forecast: Flag to indicate if forecasting should be performed.
-    #         artifact_name (optional): Specific name of the model artifact to load for evaluation or forecasting.
-    #     """
-    #     start_t = time.time()
-
-    #     # Initialize WandB
-    #     try:
-    #         with wandb.init(project=self._project, entity=self._entity, config=config):  # project and config ignored when running a sweep
-
-    #             # add the monthly metrics to WandB
-    #             add_wandb_monthly_metrics()
-
-    #             # Update config from WandB initialization above
-    #             self.config = wandb.config
-
-    #             # W&B does not directly support nested dictionaries for hyperparameters
-    #             if self.config["sweep"] and self._is_hurdle:
-    #                 self.config = self._split_hurdle_parameters()
-    #                 print(self.config)
-
-    #             if self.config["sweep"]:
-    #                 logger.info(f"Sweeping model {self.config['name']}...")
-    #                 model = self._train_model_artifact()
-    #                 logger.info(f"Evaluating model {self.config['name']}...")
-    #                 # self._evaluate_sweep(model, self._eval_type)
-
-    #             if train:
-    #                 logger.info(f"Training model {self.config['name']}...")
-    #                 self._train_model_artifact()
-
-    #             if eval:
-    #                 logger.info(f"Evaluating model {self.config['name']}...")
-    #                 self._evaluate_model_artifact(self._eval_type, artifact_name)
-
-    #             if forecast:
-    #                 logger.info(f"Forecasting model {self.config['name']}...")
-    #                 self._forecast_model_artifact(artifact_name)
-    #         wandb.finish()
-    #     except Exception as e:
-    #         logger.error(f"Error during model tasks execution: {e}")
-    #     end_t = time.time()
-    #     minutes = (end_t - start_t) / 60
-    #     logger.info(f"Done. Runtime: {minutes:.3f} minutes.\n")
-
     def _get_model(self, partitioner_dict: dict):
         """
         Get the model based on the algorithm specified in the config
@@ -184,8 +124,12 @@ class StepshifterManager(ModelManager):
     def _train_model_artifact(self):
         # print(config)
         path_raw = self._model_path.data_raw
-        path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
+
+        # W&B does not directly support nested dictionaries for hyperparameters
+        if self.config["sweep"] and self._is_hurdle:
+            self.config = self._split_hurdle_parameters()
+
         run_type = self.config["run_type"]
         df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
@@ -200,17 +144,10 @@ class StepshifterManager(ModelManager):
             print(self.config)
 
         if not self.config["sweep"]:
-            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_filename = ModelManager._generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
-            # data_fetch_timestamp = read_log_file(
-            #     path_raw / f"{run_type}_data_fetch_log.txt"
-            # ).get("Data Fetch Timestamp", None)
-            # create_log_file(
-            #     path_generated, self.config, timestamp, None, data_fetch_timestamp
-            # )
         return stepshift_model
 
     def _evaluate_model_artifact(self, eval_type, artifact_name):
@@ -232,7 +169,7 @@ class StepshifterManager(ModelManager):
             # use the latest model artifact based on the run type
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact"
-            )
+                )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
@@ -247,26 +184,9 @@ class StepshifterManager(ModelManager):
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
-        # data_generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # data_fetch_timestamp = read_log_file(
-        #     path_raw / f"{run_type}_data_fetch_log.txt"
-        # ).get("Data Fetch Timestamp", None)
-
-        # To fix:
-        # _, df_output = generate_output_dict(df_predictions, self.config)
-        # evaluation, df_evaluation = generate_metric_dict(df_output, self.config)
-        # log_wandb_log_dict(self.config, evaluation)
-        # self._save_model_outputs(df_evaluation, df_output, path_generated)
         
         for i, df in enumerate(df_predictions):
             self._save_predictions(df, path_generated, i)
-        # create_log_file(
-        #     path_generated,
-        #     self.config,
-        #     self.config["timestamp"],
-        #     data_generation_timestamp,
-        #     data_fetch_timestamp,
-        # )
 
     def _forecast_model_artifact(self, artifact_name):
         path_raw = self._model_path.data_raw
@@ -286,7 +206,7 @@ class StepshifterManager(ModelManager):
             # use the latest model artifact based on the run type
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact"
-            )
+                )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
@@ -302,19 +222,8 @@ class StepshifterManager(ModelManager):
 
         df_predictions = stepshift_model.predict(df_viewser, run_type)
         df_predictions = StepshifterManager._get_standardized_df(df_predictions)
-        # data_generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # data_fetch_timestamp = read_log_file(
-        #     path_raw / f"{run_type}_data_fetch_log.txt"
-        # ).get("Data Fetch Timestamp", None)
 
         self._save_predictions(df_predictions, path_generated)
-        # create_log_file(
-        #     path_generated,
-        #     self.config,
-        #     self.config["timestamp"],
-        #     data_generation_timestamp,
-        #     data_fetch_timestamp,
-        # )
 
     # def _evaluate_sweep(self, model, eval_type):
     #     path_raw = self._model_path.data_raw
