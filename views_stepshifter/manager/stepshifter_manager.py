@@ -144,7 +144,8 @@ class StepshifterManager(ModelManager):
             print(self.config)
 
         if not self.config["sweep"]:
-            model_filename = ModelManager._generate_model_file_name(
+            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_filename = ModelManager.generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
