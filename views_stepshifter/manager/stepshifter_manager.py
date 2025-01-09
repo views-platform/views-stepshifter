@@ -6,14 +6,14 @@ from views_pipeline_core.files.utils import (
     read_dataframe,
 )
 from views_pipeline_core.wandb.utils import (
-    add_wandb_monthly_metrics,
-    generate_wandb_log_dict,
+    add_wandb_metrics,
     log_wandb_log_dict,
 )
 from views_pipeline_core.evaluation.metrics import generate_metric_dict
 from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
+from views_evaluation.evaluation.metric_calculation import MetricsCalculator
 
 from views_forecasts.extensions import *
 import logging
@@ -188,7 +188,21 @@ class StepshifterManager(ModelManager):
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
-        
+
+        metrics_calculator = MetricsCalculator(self.config["metrics"])
+        df_actual = df_viewser[[self.config["depvar"]]]
+        step_wise_evaluation, _ = metrics_calculator.step_wise_evaluation(
+            df_actual, df_predictions, self.config["depvar"], self.config["steps"]
+        )
+        time_series_evaluation, _ = metrics_calculator.time_series_wise_evaluation(
+            df_actual, df_predictions, self.config["depvar"]
+        )
+        month_wise_evaluation, _ = metrics_calculator.month_wise_evaluation(
+            df_actual, df_predictions, self.config["depvar"]
+        )
+
+        log_wandb_log_dict(step_wise_evaluation, time_series_evaluation, month_wise_evaluation)
+
         for i, df in enumerate(df_predictions):
             self._save_predictions(df, path_generated, i)
 
