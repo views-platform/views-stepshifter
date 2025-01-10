@@ -1,5 +1,4 @@
 from views_pipeline_core.managers.model import ModelPathManager, ModelManager
-from views_pipeline_core.models.outputs import generate_output_dict
 from views_pipeline_core.files.utils import (
     read_log_file,
     create_log_file,
@@ -13,7 +12,7 @@ from views_pipeline_core.evaluation.metrics import generate_metric_dict
 from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
-from views_evaluation.evaluation.metric_calculation import MetricsCalculator
+from views_evaluation.evaluation.metrics import MetricsManager
 
 from views_forecasts.extensions import *
 import logging
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPathManager, wandb_notification: bool = True) -> None:
+    def __init__(self, model_path: ModelPathManager, wandb_notification: bool = False) -> None:
         super().__init__(model_path, wandb_notification)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
 
@@ -151,7 +150,7 @@ class StepshifterManager(ModelManager):
             stepshift_model.save(path_artifacts / model_filename)
         return stepshift_model
 
-    def _evaluate_model_artifact(self, eval_type, artifact_name):
+    def _evaluate_model_artifact(self, eval_type: str, artifact_name: str):
         # path_raw = self._model_path.data_raw
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
@@ -189,24 +188,31 @@ class StepshifterManager(ModelManager):
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
 
-        metrics_calculator = MetricsCalculator(self.config["metrics"])
+        metrics_manager = MetricsManager(self.config["metrics"])
         df_actual = df_viewser[[self.config["depvar"]]]
-        step_wise_evaluation, _ = metrics_calculator.step_wise_evaluation(
+        step_wise_evaluation, df_step_wise_evaluation = metrics_manager.step_wise_evaluation(
             df_actual, df_predictions, self.config["depvar"], self.config["steps"]
         )
-        time_series_evaluation, _ = metrics_calculator.time_series_wise_evaluation(
+        time_series_wise_evaluation, df_time_series_wise_evaluation = metrics_manager.time_series_wise_evaluation(
             df_actual, df_predictions, self.config["depvar"]
         )
-        month_wise_evaluation, _ = metrics_calculator.month_wise_evaluation(
+        month_wise_evaluation, df_month_wise_evaluation = metrics_manager.month_wise_evaluation(
             df_actual, df_predictions, self.config["depvar"]
         )
 
-        log_wandb_log_dict(step_wise_evaluation, time_series_evaluation, month_wise_evaluation)
+        log_wandb_log_dict(step_wise_evaluation, time_series_wise_evaluation, month_wise_evaluation)
+
+        self._save_evaluations(
+            df_step_wise_evaluation,
+            df_time_series_wise_evaluation,
+            df_month_wise_evaluation,
+            path_generated,
+            )
 
         for i, df in enumerate(df_predictions):
             self._save_predictions(df, path_generated, i)
 
-    def _forecast_model_artifact(self, artifact_name):
+    def _forecast_model_artifact(self, artifact_name: str):
         # path_raw = self._model_path.data_raw
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
