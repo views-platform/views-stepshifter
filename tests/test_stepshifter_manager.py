@@ -184,19 +184,17 @@ def test_train_model_artifact(mock_open, mock_datetime, mock_makedirs, mock_read
     stepshifter_manager._get_model.return_value.fit.assert_called_once()
     stepshifter_manager._get_model.return_value.save.assert_called_once()
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
 @patch("views_forecasts.extensions.ForecastAccessor.read_store")
 @patch("builtins.open", new_callable=mock_open)
 @patch("os.makedirs")
-def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, mock_read_store, mock_read_pickle, mock_read_dataframe, stepshifter_manager, mock_partitioner_dict):
+def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, mock_read_store, mock_read_pickle, stepshifter_manager, mock_partitioner_dict):
     """
     Test the _train_model_artifact method to ensure it correctly trains the model artifact during a sweep run.
     """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
 
 
