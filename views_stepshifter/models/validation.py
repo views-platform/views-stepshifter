@@ -37,6 +37,10 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
 
     try:
         assert set(dataframe.dtypes) == {np.dtype(float)}
+        if "country_id" in dataframe.columns:
+            assert set(dataframe.drop(columns=["country_id"]).dtypes) == {np.dtype(float)}
+        else:
+            assert set(dataframe.dtypes) == {np.dtype(float)}
         # print("The dataframe contains only np.float64 floats")
     except AssertionError:
         logger.exception("The dataframe must contain only np.float64 floats")
