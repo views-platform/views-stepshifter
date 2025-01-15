@@ -1,9 +1,4 @@
 from views_pipeline_core.managers.model import ModelPathManager, ModelManager
-from views_pipeline_core.files.utils import (
-    read_log_file,
-    create_log_file,
-    read_dataframe,
-)
 from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
@@ -12,8 +7,6 @@ import logging
 import pickle
 import pandas as pd
 import numpy as np
-from datetime import datetime
-from sklearn.metrics import mean_squared_error
 
 logger = logging.getLogger(__name__)
 
