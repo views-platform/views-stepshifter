@@ -26,5 +26,5 @@ source ~/.zshrc
 pip install views_stepshifter
 ```
 
-## Example
-Please refer to [tutorial.py](https://github.com/views-platform/views-stepshifter/blob/main/tutorial.ipynb) for more details.
+<!-- ## Example
+Please refer to [tutorial.py](https://github.com/views-platform/views-stepshifter/blob/main/tutorial.ipynb) for more details. -->
