@@ -1,12 +1,13 @@
 from views_pipeline_core.managers.model import ModelPathManager, ModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
+from views_pipeline_core.files.utils import read_dataframe
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
-from views_forecasts.extensions import *
 import logging
 import pickle
 import pandas as pd
 import numpy as np
+from typing import Union, Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class StepshifterManager(ModelManager):
 
     def _train_model_artifact(self):
         # print(config)
-        # path_raw = self._model_path.data_raw
+        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
 
         # W&B does not directly support nested dictionaries for hyperparameters
@@ -117,12 +118,9 @@ class StepshifterManager(ModelManager):
             self.config = self._split_hurdle_parameters()
 
         run_type = self.config["run_type"]
-        # df_viewser = read_dataframe(
-        #     path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        # )
-
-        df_viewser = pd.DataFrame.forecasts.read_store(run=self._pred_store_name,
-                                                       name=f"{self._model_path.model_name}_{self.config['run_type']}_viewser_df")
+        df_viewser = read_dataframe(
+            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
+        )
 
         partitioner_dict = self._data_loader.partition_dict
         stepshift_model = self._get_model(partitioner_dict)
@@ -137,14 +135,13 @@ class StepshifterManager(ModelManager):
         return stepshift_model
 
     def _evaluate_model_artifact(self, eval_type: str, artifact_name: str) -> List[pd.DataFrame]:
-        # path_raw = self._model_path.data_raw
+        path_raw = self._model_path.data_raw
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
         # if an artifact name is provided through the CLI, use it.
         # Otherwise, get the latest model artifact based on the run type
-
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
@@ -159,12 +156,10 @@ class StepshifterManager(ModelManager):
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-        # df_viewser = read_dataframe(
-        #     path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        # )
 
-        df_viewser = pd.DataFrame.forecasts.read_store(run=self._pred_store_name,
-                                                       name=f"{self._model_path.model_name}_{self.config['run_type']}_viewser_df")
+        df_viewser = read_dataframe(
+            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
+        )
 
         with open(path_artifact, "rb") as f:
             stepshift_model = pickle.load(f)
@@ -177,7 +172,7 @@ class StepshifterManager(ModelManager):
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
-        # path_raw = self._model_path.data_raw
+        path_raw = self._model_path.data_raw
         path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
@@ -199,8 +194,9 @@ class StepshifterManager(ModelManager):
 
         self.config["timestamp"] = path_artifact.stem[-15:]
 
-        df_viewser = pd.DataFrame.forecasts.read_store(run=self._pred_store_name,
-                                                       name=f"{self._model_path.model_name}_{self.config['run_type']}_viewser_df")
+        df_viewser = df_viewser = read_dataframe(
+            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
+        )
 
         try:
             with open(path_artifact, "rb") as f:

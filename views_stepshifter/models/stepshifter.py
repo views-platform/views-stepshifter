@@ -5,7 +5,6 @@ import logging
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
-# from views_forecasts.extensions import *
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 

@@ -19,7 +19,7 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
         raise AssertionError("Dataframe must have a two-level index")
         
     try:
-        logger.info(f"First level of the index: {dataframe.index.names[0]}")
+        # logger.info(f"First level of the index: {dataframe.index.names[0]}")
         assert dataframe.index.names[0] == "month_id"
         # print("The first level of the index is correct")
     except AssertionError:
@@ -27,7 +27,7 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
         raise AssertionError("The first level of the index must be 'month_id'")
     
     try:
-        logger.info(f"Second level of the index: {dataframe.index.names[1]}")
+        # logger.info(f"Second level of the index: {dataframe.index.names[1]}")
         assert dataframe.index.names[1] in second_level_indices
         # assert dataframe.index.names[1] in ["priogrid_gid"]
         # print("The second level of the index is correct")
