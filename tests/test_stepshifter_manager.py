@@ -157,7 +157,7 @@ def test_train_model_artifact(mock_open, mock_datetime, mock_makedirs, mock_read
     Test the _train_model_artifact method to ensure it correctly trains and saves the model artifact.
     """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+    # mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
     mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
@@ -194,7 +194,7 @@ def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, moc
     Test the _train_model_artifact method to ensure it correctly trains the model artifact during a sweep run.
     """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+    # mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
 
 
@@ -238,7 +238,7 @@ def test_evaluate_model_artifact_without_artifact_name(
     """
     Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact without a specific artifact name.
     """
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+    # mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
@@ -290,7 +290,7 @@ def test_evaluate_model_artifact_with_artifact_name(
     '''
     Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact with a specific artifact name.
     '''
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+    # mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
@@ -370,7 +370,7 @@ def test_forecast_model_artifact_with_artifact_name(
     '''
     Test the _forecast_model_artifact method to ensure it correctly forecasts the model artifact with a specific artifact name.
     '''
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+    # mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
