@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPathManager, wandb_notification: bool = False) -> None:
-        super().__init__(model_path, wandb_notification)
+    def __init__(self, model_path: ModelPathManager, wandb_notifications: bool = False) -> None:
+        super().__init__(model_path, wandb_notifications)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
 
     @staticmethod
