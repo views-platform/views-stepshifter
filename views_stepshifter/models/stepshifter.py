@@ -130,7 +130,7 @@ class StepshifterModel:
         self._prepare_time_series(df)
         for step in self._steps:
             model = self._reg(lags_past_covariates=[-step], **self._params)
-            logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
+            # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
             model.fit(self._target_train, 
                       past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
             self._models[step] = model

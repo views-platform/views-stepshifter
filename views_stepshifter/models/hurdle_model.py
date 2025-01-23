@@ -62,7 +62,7 @@ class HurdleModel(StepshifterModel):
         for step in self._steps:
             # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
             binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
-            logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
+            # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
             binary_model.fit(target_binary, past_covariates=self._past_cov)
 
             # Fit positive stage using the regression model
