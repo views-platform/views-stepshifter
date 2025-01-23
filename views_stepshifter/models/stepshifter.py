@@ -54,8 +54,7 @@ class StepshifterModel:
                     f"Change the model in the config file."
                 )
 
-    @staticmethod
-    def _get_parameters(config: Dict):
+    def _get_parameters(self, config: Dict):
         """
         Get the parameters from the config file.
         If not sweep, then get directly from the config file, otherwise have to remove some parameters.
