@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 class StepshifterModel:
 
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
-        self._steps = config['steps']
-        self._depvar = config['depvar']
-        self._reg = self._resolve_estimator(config['model_reg'])
+        self._steps = config["steps"]
+        self._depvar = config["depvar"]
+        self._reg = self._resolve_estimator(config["model_reg"])
         self._params = self._get_parameters(config)
-        self._train_start, self._train_end = partitioner_dict['train']
-        self._test_start, self._test_end = partitioner_dict['test']
+        self._train_start, self._train_end = partitioner_dict["train"]
+        self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
     
     @staticmethod
@@ -29,42 +29,40 @@ class StepshifterModel:
         must pass equality test, and instantiated sub-estimators are not equal. """
 
         match func_name:
-            case 'LinearRegressionModel':
+            case "LinearRegressionModel":
                 from darts.models import LinearRegressionModel
                 return LinearRegressionModel
-            case 'RandomForestModel':
+            case "RandomForestModel":
                 from darts.models import RandomForest
                 return RandomForest
-            case 'LightGBMModel':
+            case "LightGBMModel":
                 from darts.models import LightGBMModel
                 return LightGBMModel
-            case 'XGBModel':
+            case "XGBModel":
                 from darts.models import XGBModel
                 return XGBModel
             case _:
                 raise ValueError(f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
                                 f"Change the model in the config file.")
 
-    @staticmethod
-    def _get_parameters(config: Dict):
-        '''
+    def _get_parameters(self, config: Dict):
+        """
         Get the parameters from the config file.
         If not sweep, then get directly from the config file, otherwise have to remove some parameters.
-        '''
+        """
 
         if config["sweep"]:
-            keys_to_remove = ["algorithm", "depvar", "steps", "sweep", "run_type", "model_clf", "model_reg", "name"]
-            parameters = {k: v for k, v in config.items() if k not in keys_to_remove}
+            parameters = {k: v for k, v in config.items() if k in ["clf", "reg"]}
         else:
             parameters = config["parameters"]
 
         return parameters
 
     def _process_data(self, df: pd.DataFrame):
-        '''
+        """
         Countries appear and disappear, so we are predicting countries that exist in the last month of the training data.
         If the country appeared earlier but don't have data previously, we will fill the missing data with 0.
-        '''
+        """
 
         # set up
         self._time = df.index.names[0]
@@ -85,9 +83,9 @@ class StepshifterModel:
         return df
 
     def _prepare_time_series(self, df: pd.DataFrame):
-        '''
+        """
         Prepare time series for training and prediction
-        '''
+        """
 
         df_reset = df.reset_index(level=[1])
         self._series = TimeSeries.from_group_dataframe(df_reset, group_cols=self._level,
@@ -98,9 +96,9 @@ class StepshifterModel:
         self._past_cov = [series[self._independent_variables] for series in self._series]
 
     def _predict_by_step(self, model, step: int, sequence_number: int):
-        '''
+        """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
-        '''
+        """
 
         target = [series.slice(self._train_start, self._train_end + 1 + sequence_number)[self._depvar]
                   for series in self._series]  
@@ -140,7 +138,7 @@ class StepshifterModel:
     @views_validate
     def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         df = self._process_data(df)
-        check_is_fitted(self, 'is_fitted_')
+        check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
             preds = []
