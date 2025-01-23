@@ -5,6 +5,7 @@ from sklearn.utils.validation import check_is_fitted
 import pandas as pd
 from typing import List, Dict
 import logging
+import tqdm
 
 logger = logging.getLogger(__name__)
 class HurdleModel(StepshifterModel):
@@ -59,10 +60,10 @@ class HurdleModel(StepshifterModel):
         target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov)
                                          if (t.values() > self._threshold).any()])
 
-        for step in self._steps:
+        for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
             # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
             binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
-            logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
+            # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
             binary_model.fit(target_binary, past_covariates=self._past_cov)
 
             # Fit positive stage using the regression model
