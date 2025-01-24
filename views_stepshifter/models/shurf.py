@@ -8,6 +8,7 @@ from typing import List, Dict
 import numpy as np
 import logging
 from darts.models import RandomForest
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +91,10 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov)
                                          if (t.values() > self._threshold).any()])
 
-        for i in range(self._submodels_to_train):
+        for i in tqdm(range(self._submodels_to_train), desc="Submodels"):
             logger.info(f"Training submodel {i+1}/{self._submodels_to_train}")
-            for step in self._steps:
-                logger.info(f"Training step {step}")
+            for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
+                # logger.info(f"Training step {step}")
                 # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
                 binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
                 binary_model.fit(target_binary, past_covariates=self._past_cov)
@@ -139,17 +140,34 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             final_preds = []
             # If the evaluation type is "standard", iterate over the evaluation sequence number
             if eval_type == "standard":
-                for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):
-                    # Predict binary outcomes for each step
-                    pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
-                                        for step in self._steps]
-                    # Predict positive outcomes for each step
-                    pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
-                                            for step in self._steps]
-                    # Combine binary and positive predictions by multiplying them
-                    final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
-                    # Append the combined predictions to the final predictions list
-                    final_preds.append(final_pred)
+                # for submodel in self._submodel_list:
+                #     for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):
+                #         # Predict binary outcomes for each step
+                #         pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
+                #                             for step in self._steps]
+                #         # Predict positive outcomes for each step
+                #         pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
+                #                                 for step in self._steps]
+                        
+
+                #         # Combine binary and positive predictions by multiplying them
+                #         final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+                #         # Append the combined predictions to the final predictions list
+                #         final_preds.append(final_pred)
+                for model in self._models.values():
+                    binary_preds = []
+                    positive_preds = []
+                    for _ in range(self._pred_samples):
+                        binary_sample = np.random.binomial(1, (model[0].predict(series=df, n=len(df)) > self._threshold).astype(int))
+                        positive_sample = np.where(binary_sample > 0, model[1].predict(df, n=len(df)), 0)
+                        positive_sample = np.random.lognormal(np.log1p(positive_sample), 0.3) - 1
+                        binary_preds.append(binary_sample)
+                        positive_preds.append(positive_sample)
+                    binary_avg = np.mean(binary_preds, axis=0)
+                    positive_avg = np.mean(positive_preds, axis=0)
+                    combined_preds = binary_avg * positive_avg
+                    final_preds.append(pd.DataFrame(combined_preds, columns=df.columns))
+                return pd.concat(final_preds)
 
         else:
             # If the run type is 'forecasting', perform a single prediction
@@ -157,6 +175,8 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                                    for step in self._steps]
             pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, 0)
                                      for step in self._steps]
+            
+
             # Combine binary and positive predictions by multiplying them
             final_preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
 
