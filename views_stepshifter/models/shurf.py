@@ -66,6 +66,21 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
 
     @views_validate
     def fit(self, df: pd.DataFrame):
+        """
+        Generate predictions using the trained submodels.
+        This method performs the following steps:
+        1. Prepares the data for classification and regression stages.
+        2. Iterates over each submodel to generate predictions:
+            - Predicts probabilities using the classification model.
+            - Predicts target values using the regression model.
+            - Handles infinite values in predictions.
+        3. Draws samples from the distributions:
+            - For each prediction sample, combines classification and regression predictions.
+            - Applies binomial, Poisson, or lognormal distributions to generate final predictions.
+        4. Aggregates the predictions from all submodels into a final DataFrame.
+        Returns:
+            pd.DataFrame: A DataFrame containing the final set of predictions with indices set to 'draw'.
+        """
         df = self._process_data(df)
         self._prepare_time_series(df)
 
@@ -93,3 +108,57 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             self._submodel_list.append(submodel_dict)
             logger.info(f"Submodel {i+1}/{self._submodels_to_train} trained successfully")
         self.is_fitted_ = True
+
+    @views_validate
+    def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
+        """
+        Predicts outcomes based on the provided DataFrame and run type.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            The input data for making predictions.
+        run_type : str
+            The type of run to perform. If 'forecasting', a single prediction is made.
+            Otherwise, multiple predictions are made based on the evaluation sequence number.
+        eval_type : str, optional
+            The type of evaluation to perform. Default is "standard".
+
+        Returns:
+        --------
+        pd.DataFrame
+            The final predictions as a DataFrame.
+        """
+        # Process the input data to ensure it is in the correct format
+        df = self._process_data(df)
+        # Check if the model has been fitted before making predictions
+        check_is_fitted(self, 'is_fitted_')
+
+        # If the run type is not 'forecasting', perform multiple predictions
+        if run_type != 'forecasting':
+            final_preds = []
+            # If the evaluation type is "standard", iterate over the evaluation sequence number
+            if eval_type == "standard":
+                for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):
+                    # Predict binary outcomes for each step
+                    pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
+                                        for step in self._steps]
+                    # Predict positive outcomes for each step
+                    pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
+                                            for step in self._steps]
+                    # Combine binary and positive predictions by multiplying them
+                    final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+                    # Append the combined predictions to the final predictions list
+                    final_preds.append(final_pred)
+
+        else:
+            # If the run type is 'forecasting', perform a single prediction
+            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, 0)
+                                   for step in self._steps]
+            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, 0)
+                                     for step in self._steps]
+            # Combine binary and positive predictions by multiplying them
+            final_preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+
+        # Return the final predictions as a DataFrame
+        return final_preds
