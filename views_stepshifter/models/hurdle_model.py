@@ -40,10 +40,10 @@ class HurdleModel(StepshifterModel):
     
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]], threshold: float = 1.0):
         super().__init__(config, partitioner_dict)
-        self._clf = self._resolve_estimator(config['model_clf'])
-        self._reg = self._resolve_estimator(config['model_reg'])
-        self._clf_params = self._get_parameters(config)['clf']
-        self._reg_params = self._get_parameters(config)['reg']
+        self._clf = self._resolve_estimator(config["model_clf"])
+        self._reg = self._resolve_estimator(config["model_reg"])
+        self._clf_params = self._get_parameters(config)["clf"]
+        self._reg_params = self._get_parameters(config)["reg"]
         self._threshold = threshold
 
     @views_validate
@@ -75,9 +75,9 @@ class HurdleModel(StepshifterModel):
     @views_validate
     def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         df = self._process_data(df)
-        check_is_fitted(self, 'is_fitted_')
+        check_is_fitted(self, "is_fitted_")
 
-        if run_type != 'forecasting':
+        if run_type != "forecasting":
             final_preds = []
             if eval_type == "standard":
                 for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):

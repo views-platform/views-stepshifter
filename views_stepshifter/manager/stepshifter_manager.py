@@ -35,33 +35,34 @@ class StepshifterManager(ModelManager):
         df = df.mask(df < 0, 0)
         return df
 
-    def _update_sweep_config(self, args):
-        """
-        Updates the configuration object with config_hyperparameters, config_meta, config_deployment, and the command line arguments.
+    # def _update_sweep_config(self, wandb_config):
+    #     """
+    #     Updates the configuration object with config_hyperparameters, config_meta, config_deployment, and the command line arguments.
 
-        Args:
-            args: Command line arguments
+    #     Args:
+    #         args: Command line arguments
 
-        Returns:
-            The updated configuration object.
-        """
+    #     Returns:
+    #         The updated configuration object.
+    #     """
 
-        config = self._config_sweep
-        config["parameters"]["run_type"] = {"value": args.run_type}
-        config["parameters"]["sweep"] = {"value": True}
-        config["parameters"]["name"] = {"value": self._config_meta["name"]}
-        config["parameters"]["depvar"] = {"value": self._config_meta["depvar"]}
-        config["parameters"]["algorithm"] = {"value": self._config_meta["algorithm"]}
+    #     config = self._config_sweep
+    #     config["parameters"]["run_type"] = {"value": args.run_type}
+    #     config["parameters"]["sweep"] = {"value": True}
+    #     config["parameters"]["name"] = {"value": self._config_meta["name"]}
+    #     config["parameters"]["depvar"] = {"value": self._config_meta["depvar"]}
+    #     config["parameters"]["algorithm"] = {"value": self._config_meta["algorithm"]}
+    #     config["parameters"]["metrics"] = {"value": self._config_meta["metrics"]}
 
-        if self._is_hurdle:
-            config["parameters"]["model_clf"] = {
-                "value": self._config_meta["model_clf"]
-            }
-            config["parameters"]["model_reg"] = {
-                "value": self._config_meta["model_reg"]
-            }
+    #     if self._is_hurdle:
+    #         config["parameters"]["model_clf"] = {
+    #             "value": self._config_meta["model_clf"]
+    #         }
+    #         config["parameters"]["model_reg"] = {
+    #             "value": self._config_meta["model_reg"]
+    #         }
 
-        return config
+    #     return config
 
     def _split_hurdle_parameters(self):
         """
@@ -71,7 +72,6 @@ class StepshifterManager(ModelManager):
         Returns:
             A dictionary containing original config, the split classification and regression parameters.
         """
-
         clf_dict = {}
         reg_dict = {}
         config = self.config
@@ -99,7 +99,6 @@ class StepshifterManager(ModelManager):
         Returns:
             The model object based on the algorithm specified in the config
         """
-
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
         else:
@@ -109,7 +108,7 @@ class StepshifterManager(ModelManager):
         return model
 
     def _train_model_artifact(self):
-        # print(config)
+        
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
 
@@ -136,7 +135,6 @@ class StepshifterManager(ModelManager):
 
     def _evaluate_model_artifact(self, eval_type: str, artifact_name: str) -> List[pd.DataFrame]:
         path_raw = self._model_path.data_raw
-        path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -173,7 +171,6 @@ class StepshifterManager(ModelManager):
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
         path_raw = self._model_path.data_raw
-        path_generated = self._model_path.data_generated
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -209,21 +206,18 @@ class StepshifterManager(ModelManager):
 
         return df_prediction
 
-    # def _evaluate_sweep(self, model, eval_type):
-    #     path_raw = self._model_path.data_raw
-    #     run_type = self.config["run_type"]
-    #     steps = self.config["steps"]
+    def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
+        path_raw = self._model_path.data_raw
+        run_type = self.config["run_type"]
 
-    #     df_viewser = pd.read_pickle(path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}")
-    #     df = model.predict(run_type, df_viewser)
-    #     df = self._get_standardized_df(df)
+        df_viewser = read_dataframe(
+            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
+        )
 
-    #     # Temporarily keep this because the metric to minimize is MSE
-    #     pred_cols = [f"step_pred_{str(i)}" for i in steps]
-    #     df["mse"] = df.apply(lambda row: mean_squared_error([row[self.config["depvar"]]] * len(steps),
-    #                                                         [row[col] for col in pred_cols]), axis=1)
+        df_predictions = model.predict(df_viewser, run_type, eval_type)
+        df_predictions = [
+            StepshifterManager._get_standardized_df(df) for df in df_predictions
+        ]
 
-    #     wandb.log({"MSE": df["mse"].mean()})
+        return df_predictions
 
-    #     evaluation, _ = generate_metric_dict(df, self.config)
-    #     log_wandb_log_dict(self.config, evaluation)

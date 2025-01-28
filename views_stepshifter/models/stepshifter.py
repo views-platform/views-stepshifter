@@ -54,25 +54,14 @@ class StepshifterModel:
                     f"Change the model in the config file."
                 )
 
-    @staticmethod
-    def _get_parameters(config: Dict):
+    def _get_parameters(self, config: Dict):
         """
         Get the parameters from the config file.
         If not sweep, then get directly from the config file, otherwise have to remove some parameters.
         """
 
         if config["sweep"]:
-            keys_to_remove = [
-                "algorithm",
-                "depvar",
-                "steps",
-                "sweep",
-                "run_type",
-                "model_clf",
-                "model_reg",
-                "name",
-            ]
-            parameters = {k: v for k, v in config.items() if k not in keys_to_remove}
+            parameters = {k: v for k, v in config.items() if k in ["clf", "reg"]}
         else:
             parameters = config["parameters"]
 
@@ -172,9 +161,8 @@ class StepshifterModel:
         ):  # ncols=100
             model = self._reg(lags_past_covariates=[-step], **self._params)
             # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
-            model.fit(
-                self._target_train, past_covariates=self._past_cov
-            )  # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+            model.fit(self._target_train, 
+                      past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
             self._models[step] = model
         self.is_fitted_ = True
 
