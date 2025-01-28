@@ -68,7 +68,7 @@ def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deploymen
         "config_hyperparameters.py": mock_config_hyperparameters,
         "config_sweep.py": mock_config_sweep
     }.get(file, None)):  
-        manager = StepshifterManager(mock_model_path)
+        manager = StepshifterManager(mock_model_path, use_prediction_store=False)
         return manager
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_co
         "config_hyperparameters.py": mock_config_hyperparameters,
         "config_sweep.py": mock_config_sweep
     }.get(file, None)):  
-        manager = StepshifterManager(mock_model_path)
+        manager = StepshifterManager(mock_model_path, use_prediction_store=False)
         return manager
 
 def test_stepshifter_manager_init_hurdle(stepshifter_manager_hurdle):
