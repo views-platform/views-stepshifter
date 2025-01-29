@@ -27,8 +27,7 @@
 
 ## 🧠 Overview  
 **Stepshifter** is a machine learning model designed for **time-series forecasting** using [Darts](https://unit8co.github.io/darts/). 
-It solves **[list tasks, e.g., regression and classification]** and provides **[specific features, e.g., uncertainty quantification, scalable design, etc.]**.
-
+It solves **[regression and classification]** tasks. 
 
 **Key Capabilities**:
 - **Probabilistic Outputs**: [Brief description of output style].      
@@ -161,12 +160,10 @@ This project is licensed under the [LICENSE](/LICENSE) file.
 
 ## 💬 Acknowledgements  
 
-This project builds upon:  
+<div style="width: 100%; max-width: 1500px; height: 400px; overflow: hidden; position: relative; margin-top: 50px;">
+  <img src="image.png" alt="Funder logos" style="position: absolute; top: -50px; width: 100%; height: auto;">
+</div>
 
-- [UCDP Georeferenced Event Dataset (GED)](https://ucdp.uu.se/)  
-- [PRIO Grid](https://grid.prio.org/#/)  
-- Concepts from [relevant references or research papers].  
-- Funding from [insert funding organizations].  
 
 Special thanks to the **VIEWS MD&D Team** for their collaboration and support.  
 
