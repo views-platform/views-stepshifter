@@ -30,7 +30,7 @@
 It solves **[regression and classification]** tasks. 
 
 **Key Capabilities**:
-- **Probabilistic Outputs**: [Brief description of output style].      
+- **Probabilistic Outputs**: Binary outputs and point predictions.       
 - **Learning Approach**:    
 1. ```LinearRegressionModel```, 
 2. ```RandomForest```, 
