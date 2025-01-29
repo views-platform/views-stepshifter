@@ -23,7 +23,7 @@ class StepshifterModel:
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
         self._metrics = config["metrics"]
-        self._depvar = config["depvar"]
+        
 
     @staticmethod
     def _resolve_estimator(func_name: str):
