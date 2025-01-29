@@ -26,17 +26,18 @@
 ---
 
 ## 🧠 Overview  
-**Stepshifter** is a machine learning model designed for **time-series forecasting** using Darts. 
+**Stepshifter** is a machine learning model designed for **time-series forecasting** using [Darts](https://unit8co.github.io/darts/). 
 It solves **[list tasks, e.g., regression and classification]** and provides **[specific features, e.g., uncertainty quantification, scalable design, etc.]**.
 
 
 **Key Capabilities**:
 - **Probabilistic Outputs**: [Brief description of output style].      
-- **Learning Approach**:    1. ```LinearRegressionModel```, 
-                            2. ```RandomForest```, 
-                            3. ```LightGBMModel```, 
-                            4. ```XGBModel```,
-                            5. ```HurdleModel```.  
+- **Learning Approach**:    
+1. ```LinearRegressionModel```, 
+2. ```RandomForest```, 
+3. ```LightGBMModel```, 
+4. ```XGBModel```,
+5. ```HurdleModel```.  
 - **Integration-Ready**: Built to seamlessly integrate into the larger **VIEWS Pipeline**. 
 
 
@@ -98,12 +99,6 @@ See the organization/pipeline level [docs](https://github.com/views-platform/doc
 ## 🏗 Architecture  
 
 [Provide a high-level overview of the architecture. Include placeholders for key components.]  
-
-### Key Components  
-
-- **[Component 1]:** [e.g., CNNs for spatial dependencies].  
-- **[Component 2]:** [e.g., LSTMs for temporal learning].  
-- **[Component 3]:** [e.g., dropout layers for uncertainty quantification].  
 
 ### Workflow  
 
