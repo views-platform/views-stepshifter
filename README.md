@@ -58,7 +58,7 @@ It solves **[list tasks, e.g., regression and classification]** and provides **[
 **Stepshifter** fits into the pipeline as follows:  
 1. **Data Input:** Processes preprocessed data from [**views-pipeline-core**](https://github.com/views-platform/views-pipeline-core).  
 2. **Model Execution:** This modeling approach involves shifting all independent variables in time, in order to train models that can predict future values of the dependent variable. More details can be found in [Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf).
-3. **Post-Processing:** Outputs are sent to **views-evaluation** for further analysis.
+3. **Post-Processing:** Outputs are sent to [**views-evaluation**](https://github.com/views-platform/views-evaluation) for further analysis.
 
 ---
 
@@ -67,6 +67,12 @@ It solves **[list tasks, e.g., regression and classification]** and provides **[
 - **[Darts models]**: Stepshifter model class supports multiple Darts forecasting models, including ```LinearRegressionModel```, ```RandomForest```, ```LightGBMModel```, and ```XGBModel```. 
 - **[Automated Data Cleanup]**: Stepshifter model class automatically processes missing data and ensures consistent multi-index formatting for time-series data.
 - **[Hurdle model]**: Hurdle model class inherits from StepshifterModel.
+ A hurdle model consists of two stages:
+1. Binary stage: Predicts whether the target variable is 0 or > 0.
+2. Positive stage: Predicts the value of the target variable when it is > 0.
+
+
+
 ---
 
 ## ⚙️ Installation  
@@ -106,8 +112,9 @@ See the organization/pipeline level [docs](https://github.com/views-platform/doc
 2. **Processing:** Converting to Darts time series data.  
 3. **Prediction:** Regression predictions.  
 
-Refer to the **[Model Paper/Docs](link-to-paper-or-docs)** for an in-depth explanation.
+Refer to the **[Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf)** for an in-depth explanation.
 
+For more detailed information about the models themselves, refer to the [VIEWS models catalog](https://github.com/views-platform/views-models/tree/readme?tab=readme-ov-file#catalogs). 
 ---
 
 ## 🗂 Project Structure  
@@ -170,12 +177,10 @@ This model class is designed for time-series forecasting using Darts. It
 * supports multiple Darts forecasting models, including ```LinearRegressionModel```, ```RandomForest```, ```LightGBMModel```, and ```XGBModel```.
 * automatically processes missing data and ensures consistent multi-index formatting for time-series data.
 
-This modeling approach involves shifting all independent variables in time, in order to train models that can predict future values of the dependent variable. More details can be find in [Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf).
+This modeling approach involves shifting all independent variables in time, in order to train models that can predict future values of the dependent variable. 
 
 ### 3. HurdleModel
-This model class inherits from StepshifterModel. A hurdle model consists of two stages:
-1. Binary stage: Predicts whether the target variable is 0 or > 0.
-2. Positive stage: Predicts the value of the target variable when it is > 0.
+
 
 This approach differs from a traditional implementation in three aspects:
 1. In the first stage, since Darts doesn't support classification models, a regression model is used instead. These estimates are not strictly bounded between 0 and 1, but this is acceptable for the purpose of this step.
