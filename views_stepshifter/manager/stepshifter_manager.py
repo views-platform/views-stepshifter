@@ -96,19 +96,16 @@ class StepshifterManager(ModelManager):
         stepshift_model.fit(df_viewser)
 
         if not self.config["sweep"]:
-            print("here")
             # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_filename = ModelManager.generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
-            print("here2", stepshift_model, model_filename)
         return stepshift_model
 
     def _evaluate_model_artifact(self, eval_type: str, artifact_name: str) -> List[pd.DataFrame]:
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
-        print("path arttt", path_artifacts)
         run_type = self.config["run_type"]
 
         # if an artifact name is provided through the CLI, use it.
@@ -121,27 +118,22 @@ class StepshifterManager(ModelManager):
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
-            print("else")
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact"
                 )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
-            print("path_artifact", path_artifact)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-        print("self.config[timestamp]", self.config["timestamp"])
         df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
         )
 
         with open(path_artifact, "rb") as f:
             stepshift_model = pickle.load(f)
-        print("stepshift model", stepshift_model)
         df_predictions = stepshift_model.predict(df_viewser, run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
-        print(df_predictions)
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
@@ -157,7 +149,6 @@ class StepshifterManager(ModelManager):
             if not artifact_name.endswith(".pkl"):
                 artifact_name += ".pkl"
             path_artifact = path_artifacts / artifact_name
-            print(path_artifact)
         else:
             # use the latest model artifact based on the run type
             logger.info(
@@ -170,7 +161,6 @@ class StepshifterManager(ModelManager):
         df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
         )
-        print(df_viewser)
         try:
             with open(path_artifact, "rb") as f:
                 stepshift_model = pickle.load(f)
