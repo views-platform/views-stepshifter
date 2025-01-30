@@ -82,9 +82,8 @@ It solves **[regression and classification]** tasks.
 
 ### Prerequisites  
 
-- Python >= 3.8  
-- GPU support recommended (e.g., NVIDIA CUDA).  
-- Access to **views-pipeline-core** for data preprocessing.  
+- Python >= 3.11 
+- Access to **views-pipeline-core**.
 
 ### Steps  
 
