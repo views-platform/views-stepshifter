@@ -35,35 +35,6 @@ class StepshifterManager(ModelManager):
         df = df.mask(df < 0, 0)
         return df
 
-    # def _update_sweep_config(self, wandb_config):
-    #     """
-    #     Updates the configuration object with config_hyperparameters, config_meta, config_deployment, and the command line arguments.
-
-    #     Args:
-    #         args: Command line arguments
-
-    #     Returns:
-    #         The updated configuration object.
-    #     """
-
-    #     config = self._config_sweep
-    #     config["parameters"]["run_type"] = {"value": args.run_type}
-    #     config["parameters"]["sweep"] = {"value": True}
-    #     config["parameters"]["name"] = {"value": self._config_meta["name"]}
-    #     config["parameters"]["depvar"] = {"value": self._config_meta["depvar"]}
-    #     config["parameters"]["algorithm"] = {"value": self._config_meta["algorithm"]}
-    #     config["parameters"]["metrics"] = {"value": self._config_meta["metrics"]}
-
-    #     if self._is_hurdle:
-    #         config["parameters"]["model_clf"] = {
-    #             "value": self._config_meta["model_clf"]
-    #         }
-    #         config["parameters"]["model_reg"] = {
-    #             "value": self._config_meta["model_reg"]
-    #         }
-
-    #     return config
-
     def _split_hurdle_parameters(self):
         """
         Split the parameters dictionary into two separate dictionaries, one for the
