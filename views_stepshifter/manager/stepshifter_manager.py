@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 class StepshifterManager(ModelManager):
 
-    def __init__(self, model_path: ModelPathManager, wandb_notifications: bool = True) -> None:
-        super().__init__(model_path, wandb_notifications)
+    def __init__(self, model_path: ModelPathManager, wandb_notifications: bool = True, use_prediction_store: bool = True) -> None:
+        super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
 
     @staticmethod
@@ -34,35 +34,6 @@ class StepshifterManager(ModelManager):
         df = df.replace([np.inf, -np.inf], 0)
         df = df.mask(df < 0, 0)
         return df
-
-    # def _update_sweep_config(self, wandb_config):
-    #     """
-    #     Updates the configuration object with config_hyperparameters, config_meta, config_deployment, and the command line arguments.
-
-    #     Args:
-    #         args: Command line arguments
-
-    #     Returns:
-    #         The updated configuration object.
-    #     """
-
-    #     config = self._config_sweep
-    #     config["parameters"]["run_type"] = {"value": args.run_type}
-    #     config["parameters"]["sweep"] = {"value": True}
-    #     config["parameters"]["name"] = {"value": self._config_meta["name"]}
-    #     config["parameters"]["depvar"] = {"value": self._config_meta["depvar"]}
-    #     config["parameters"]["algorithm"] = {"value": self._config_meta["algorithm"]}
-    #     config["parameters"]["metrics"] = {"value": self._config_meta["metrics"]}
-
-    #     if self._is_hurdle:
-    #         config["parameters"]["model_clf"] = {
-    #             "value": self._config_meta["model_clf"]
-    #         }
-    #         config["parameters"]["model_reg"] = {
-    #             "value": self._config_meta["model_reg"]
-    #         }
-
-    #     return config
 
     def _split_hurdle_parameters(self):
         """
@@ -111,7 +82,6 @@ class StepshifterManager(ModelManager):
         
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
-
         # W&B does not directly support nested dictionaries for hyperparameters
         if self.config["sweep"] and self._is_hurdle:
             self.config = self._split_hurdle_parameters()
@@ -154,19 +124,16 @@ class StepshifterManager(ModelManager):
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-
         df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
         )
 
         with open(path_artifact, "rb") as f:
             stepshift_model = pickle.load(f)
-
         df_predictions = stepshift_model.predict(df_viewser, run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
-
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
@@ -191,15 +158,15 @@ class StepshifterManager(ModelManager):
 
         self.config["timestamp"] = path_artifact.stem[-15:]
 
-        df_viewser = df_viewser = read_dataframe(
+        df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
         )
-
         try:
             with open(path_artifact, "rb") as f:
                 stepshift_model = pickle.load(f)
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
+            raise
 
         df_prediction = stepshift_model.predict(df_viewser, run_type)
         df_prediction = StepshifterManager._get_standardized_df(df_prediction)

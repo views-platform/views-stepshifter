@@ -1,3 +1,8 @@
+![GitHub License](https://img.shields.io/github/license/views-platform/views-stepshifter)
+![GitHub branch check runs](https://img.shields.io/github/check-runs/views-platform/views-stepshifter/main)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/views-platform/views-stepshifter)
+![GitHub Release](https://img.shields.io/github/v/release/views-platform/views-stepshifter)
+
 
 <div style="width: 100%; max-width: 1500px; height: 400px; overflow: hidden; position: relative;">
   <img src="https://pbs.twimg.com/profile_banners/1237000633896652800/1717069203/1500x500" alt="VIEWS Twitter Header" style="position: absolute; top: -50px; width: 100%; height: auto;">
@@ -78,9 +83,9 @@ It solves **[regression and classification]** tasks.
 
 ### Prerequisites  
 
-- Python >= 3.8  
-- GPU support recommended (e.g., NVIDIA CUDA).  
-- Access to **views-pipeline-core** for data preprocessing.  
+- Python >= 3.11 
+- Access to **views-pipeline-core**.
+
 
 ### Steps  
 
@@ -107,7 +112,8 @@ Stepshifter integrates seamlessly with the VIEWS pipeline. After processing, out
 
 This modeling approach involves shifting all independent variables in time, in order to train models that can predict future values of the dependent variable. More details can be found in [Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf).
 
-### 3. Hurdle Model
+### 2. Hurdle Model
+
 
 This approach differs from a traditional implementation in three aspects:
 1. In the first stage, since Darts doesn't support classification models, a regression model is used instead. These estimates are not strictly bounded between 0 and 1, but this is acceptable for the purpose of this step.
@@ -116,7 +122,8 @@ are considered positive outcomes. It is not set as 0 because most predictions wo
 3.  In the second stage, a regression model is used to predict for the selected time series. Since Darts time series require a continuous timestamp, we can't get rid of those timestamps with negative prediction produced in the first stage like a traditional implementation. Instead we include the entire time series for countries or PRIO grids where the first stage yielded at least one positive prediction.
 
 
-### Workflow  
+## 🚦 Workflow  
+
 
 1. **Input:** VIEWS historical conflict data.  
 2. **Processing:** Converting to Darts time series data.  
@@ -124,7 +131,8 @@ are considered positive outcomes. It is not set as 0 because most predictions wo
 
 Refer to the **[Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf)** for an in-depth explanation.
 
-For more detailed information about the VIEWS Stepshifter models themselves, refer to the [VIEWS models catalog](https://github.com/views-platform/views-models/tree/readme?tab=readme-ov-file#catalogs). 
+For more detailed information about the VIEWS Stepshifter models themselves, refer to the [VIEWS models catalog](https://github.com/views-platform/views-models/). 
+
 ---
 
 ## 🗂 Project Structure  
@@ -168,8 +176,4 @@ This project is licensed under the [LICENSE](/LICENSE) file.
 
 
 Special thanks to the **VIEWS MD&D Team** for their collaboration and support.  
-
-
-  
-
 
