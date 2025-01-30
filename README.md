@@ -3,6 +3,7 @@
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/views-platform/views-stepshifter)
 ![GitHub Release](https://img.shields.io/github/v/release/views-platform/views-stepshifter)
 
+
 <div style="width: 100%; max-width: 1500px; height: 400px; overflow: hidden; position: relative;">
   <img src="https://pbs.twimg.com/profile_banners/1237000633896652800/1717069203/1500x500" alt="VIEWS Twitter Header" style="position: absolute; top: -50px; width: 100%; height: auto;">
 </div>
@@ -85,6 +86,7 @@ It solves **[regression and classification]** tasks.
 - Python >= 3.11 
 - Access to **views-pipeline-core**.
 
+
 ### Steps  
 
 See the organization/pipeline level [docs](https://github.com/views-platform/docs)  
@@ -112,6 +114,7 @@ This modeling approach involves shifting all independent variables in time, in o
 
 ### 2. Hurdle Model
 
+
 This approach differs from a traditional implementation in three aspects:
 1. In the first stage, since Darts doesn't support classification models, a regression model is used instead. These estimates are not strictly bounded between 0 and 1, but this is acceptable for the purpose of this step.
 2. To determine whether an observation is classified as "positive," we apply a threshold. The default threshold is 1, meaning that predictions above this value 
@@ -121,6 +124,7 @@ are considered positive outcomes. It is not set as 0 because most predictions wo
 
 ## 🚦 Workflow  
 
+
 1. **Input:** VIEWS historical conflict data.  
 2. **Processing:** Converting to Darts time series data.  
 3. **Prediction:** Regression predictions.  
@@ -128,6 +132,7 @@ are considered positive outcomes. It is not set as 0 because most predictions wo
 Refer to the **[Appendix A of Hegre et al. (2020)](https://viewsforecasting.org/wp-content/uploads/2020/09/AppendixA.pdf)** for an in-depth explanation.
 
 For more detailed information about the VIEWS Stepshifter models themselves, refer to the [VIEWS models catalog](https://github.com/views-platform/views-models/). 
+
 ---
 
 ## 🗂 Project Structure  
@@ -171,3 +176,4 @@ This project is licensed under the [LICENSE](/LICENSE) file.
 
 
 Special thanks to the **VIEWS MD&D Team** for their collaboration and support.  
+
