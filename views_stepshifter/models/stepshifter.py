@@ -13,17 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 class StepshifterModel:
-
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         self._steps = config["steps"]
-        self._depvar = config["depvar"]
         self._reg = self._resolve_estimator(config["model_reg"])
         self._params = self._get_parameters(config)
         self._train_start, self._train_end = partitioner_dict["train"]
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
         self._metrics = config["metrics"]
-        
+
+        if len(config["depvar"]) > 1:
+            raise ValueError("Stepshifter only supports one dependent variable")
+        self._depvar = config["depvar"][0] 
 
     @staticmethod
     def _resolve_estimator(func_name: str):
