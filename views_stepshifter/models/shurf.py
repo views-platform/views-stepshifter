@@ -154,7 +154,6 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                         # Append the combined predictions to the final predictions list
                         final_preds.append(final_pred)
                     submodel_preds[i] = final_preds
-
         else:
             # If the run type is 'forecasting', perform a single prediction
             submodel_preds = {}
