@@ -22,9 +22,13 @@ class StepshifterModel:
         self._models = {}
         self._metrics = config["metrics"]
 
-        if len(config["depvar"]) > 1:
+        # Multiple targets handling
+        if not isinstance(config["depvar"]):
+            raise ValueError("Dependent variable must be a list")
+        elif len(config["depvar"]) > 1:
             raise ValueError("Stepshifter only supports one dependent variable")
-        self._depvar = config["depvar"][0] 
+        else:
+            self._depvar = config["depvar"][0] 
 
     @staticmethod
     def _resolve_estimator(func_name: str):
@@ -35,19 +39,15 @@ class StepshifterModel:
         match func_name:
             case "LinearRegressionModel":
                 from darts.models import LinearRegressionModel
-
                 return LinearRegressionModel
             case "RandomForestModel":
                 from darts.models import RandomForest
-
                 return RandomForest
             case "LightGBMModel":
                 from darts.models import LightGBMModel
-
                 return LightGBMModel
             case "XGBModel":
                 from darts.models import XGBModel
-
                 return XGBModel
             case _:
                 raise ValueError(
