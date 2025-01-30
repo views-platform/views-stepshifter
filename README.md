@@ -188,6 +188,16 @@ This project is licensed under the [LICENSE](/LICENSE) file.
 </div>
 
 
+<table>
+  <tr>
+    <td style="background-color:white; padding:10px;">
+      <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/ESCWA-Logo.png?resize=1024%2C377&ssl=1" alt="ESCWA Logo" width="150">
+    </td>
+  </tr>
+</table>
+
+
+
 Special thanks to the **VIEWS MD&D Team** for their collaboration and support.  
 
 
