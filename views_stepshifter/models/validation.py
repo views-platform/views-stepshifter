@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 def dataframe_is_right_format(dataframe: pd.DataFrame):
+    pgm_cols = ["priogrid_gid", "month_id"]
+    cm_cols = ["country_id", "month_id"]
+    second_level_indices = ["priogrid_gid", "country_id", "priogrid_id"]
     try:
         assert isinstance(dataframe.index, pd.MultiIndex) and len(dataframe.index.levels) == 2
         # assert len(dataframe.index.levels) == 2
@@ -16,6 +19,7 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
         raise AssertionError("Dataframe must have a two-level index")
         
     try:
+        # logger.info(f"First level of the index: {dataframe.index.names[0]}")
         assert dataframe.index.names[0] == "month_id"
         # print("The first level of the index is correct")
     except AssertionError:
@@ -23,7 +27,9 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
         raise AssertionError("The first level of the index must be 'month_id'")
     
     try:
-        assert dataframe.index.names[1] in ["country_id", "priogrid_gid"]
+        # logger.info(f"Second level of the index: {dataframe.index.names[1]}")
+        assert dataframe.index.names[1] in second_level_indices
+        # assert dataframe.index.names[1] in ["priogrid_gid"]
         # print("The second level of the index is correct")
     except AssertionError:
         logger.exception("The second level of the index must be 'country_id' or 'priogrid_gid'")
@@ -31,6 +37,10 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
 
     try:
         assert set(dataframe.dtypes) == {np.dtype(float)}
+        if "country_id" in dataframe.columns:
+            assert set(dataframe.drop(columns=["country_id"]).dtypes) == {np.dtype(float)}
+        else:
+            assert set(dataframe.dtypes) == {np.dtype(float)}
         # print("The dataframe contains only np.float64 floats")
     except AssertionError:
         logger.exception("The dataframe must contain only np.float64 floats")

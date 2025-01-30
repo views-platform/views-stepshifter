@@ -4,8 +4,10 @@ from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
 import pandas as pd
 from typing import List, Dict
+import logging
+import tqdm
 
-
+logger = logging.getLogger(__name__)
 class HurdleModel(StepshifterModel):
     """
     Hurdle model for time series forecasting. The model consists of two stages:
@@ -38,10 +40,10 @@ class HurdleModel(StepshifterModel):
     
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]], threshold: float = 1.0):
         super().__init__(config, partitioner_dict)
-        self._clf = self._resolve_estimator(config['model_clf'])
-        self._reg = self._resolve_estimator(config['model_reg'])
-        self._clf_params = self._get_parameters(config)['clf']
-        self._reg_params = self._get_parameters(config)['reg']
+        self._clf = self._resolve_estimator(config["model_clf"])
+        self._reg = self._resolve_estimator(config["model_reg"])
+        self._clf_params = self._get_parameters(config)["clf"]
+        self._reg_params = self._get_parameters(config)["reg"]
         self._threshold = threshold
 
     @views_validate
@@ -58,9 +60,10 @@ class HurdleModel(StepshifterModel):
         target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov)
                                          if (t.values() > self._threshold).any()])
 
-        for step in self._steps:
+        for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
             # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
             binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
+            # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
             binary_model.fit(target_binary, past_covariates=self._past_cov)
 
             # Fit positive stage using the regression model
@@ -72,9 +75,9 @@ class HurdleModel(StepshifterModel):
     @views_validate
     def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         df = self._process_data(df)
-        check_is_fitted(self, 'is_fitted_')
+        check_is_fitted(self, "is_fitted_")
 
-        if run_type != 'forecasting':
+        if run_type != "forecasting":
             final_preds = []
             if eval_type == "standard":
                 for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type)):

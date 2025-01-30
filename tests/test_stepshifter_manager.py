@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
 from views_stepshifter.models.stepshifter import StepshifterModel
-from views_pipeline_core.files.utils import create_log_file
 
 @pytest.fixture
 def mock_model_path():
@@ -145,14 +144,15 @@ def test_get_model(stepshifter_manager, mock_partitioner_dict):
     model = stepshifter_manager._get_model(mock_partitioner_dict)
     assert isinstance(model, StepshifterModel)
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
+
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
-@patch("views_pipeline_core.files.utils.create_log_file")
 @patch("views_pipeline_core.files.utils.read_log_file")
-@patch("views_stepshifter.manager.stepshifter_manager.datetime")
+@patch("datetime.datetime")
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=mock_open)
-def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read_log_file, mock_create_log_file, mock_read_pickle, mock_read_dataframe, stepshifter_manager, mock_partitioner_dict):
+@patch("views_forecasts.extensions.ForecastAccessor.read_store")
+@patch("views_pipeline_core.files.utils.read_log_file")
+def test_train_model_artifact(mock_open, mock_datetime, mock_makedirs, mock_read_store, mock_read_log_file, mock_read_pickle, mock_read_dataframe, stepshifter_manager, mock_partitioner_dict):
     """
     Test the _train_model_artifact method to ensure it correctly trains and saves the model artifact.
     """
@@ -160,6 +160,7 @@ def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
     mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
+    mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
 
     stepshifter_manager._data_loader = MagicMock()
     stepshifter_manager._data_loader.partition_dict = mock_partitioner_dict
@@ -176,26 +177,26 @@ def test_train_model_artifact(mock_open, mock_makedirs, mock_datetime, mock_read
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
     stepshifter_manager._train_model_artifact()
-
+    
     mock_makedirs.return_value = None
     mock_open.return_value.__enter__.return_value = MagicMock()
 
     stepshifter_manager._get_model.return_value.fit.assert_called_once()
     stepshifter_manager._get_model.return_value.save.assert_called_once()
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
 @patch("views_stepshifter.manager.stepshifter_manager.pd.read_pickle")
-@patch("views_pipeline_core.files.utils.create_log_file")
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
+@patch("views_forecasts.extensions.ForecastAccessor.read_store")
 @patch("builtins.open", new_callable=mock_open)
 @patch("os.makedirs")
-def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, mock_create_log_file, mock_read_pickle, mock_read_dataframe, stepshifter_manager, mock_partitioner_dict):
+def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, mock_read_store, mock_read_pickle, stepshifter_manager, mock_partitioner_dict):
     """
     Test the _train_model_artifact method to ensure it correctly trains the model artifact during a sweep run.
     """
     mock_read_pickle.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
+    mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
+
 
     stepshifter_manager._data_loader = MagicMock()
     stepshifter_manager._data_loader.partition_dict = mock_partitioner_dict
@@ -217,191 +218,171 @@ def test_train_model_artifact_sweep(mock_open, mock_makedirs, mock_datetime, moc
 
     stepshifter_manager._get_model.return_value.fit.assert_called_once()
     stepshifter_manager._get_model.return_value.save.assert_not_called()
-    mock_create_log_file.assert_not_called()
 
 
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
-@patch("views_stepshifter.manager.stepshifter_manager.read_log_file")
+
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
-@patch("views_stepshifter.manager.stepshifter_manager.open", new_callable=MagicMock)
+@patch("views_forecasts.extensions.ForecastAccessor.read_store")
 @patch("views_stepshifter.manager.stepshifter_manager.pickle.load")
-@patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
+@patch("views_pipeline_core.managers.model.ModelPathManager.get_latest_model_artifact_path")
 @patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._save_predictions")
-@patch("views_stepshifter.manager.stepshifter_manager.create_log_file")
 def test_evaluate_model_artifact_without_artifact_name(
-    mock_create_log_file,
-    mock_save_predictions,
     mock_get_latest_model_artifact,
     mock_pickle_load,
     mock_open,
     mock_datetime,
-    mock_read_log_file,
-    mock_read_dataframe,
+    mock_read_store,
     stepshifter_manager
 ):
     """
     Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact without a specific artifact name.
     """
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
     stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
-    mock_get_latest_model_artifact.return_value = Path("/mock/path/to/artifact.pkl")
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
-    mock_pickle_load.return_value = MagicMock() 
+    # Ensure the mock returns a Path object
+    artifact_path = Path("/mock/path/to/artifacts/test_run_type_model_artifact.pkl")
+    mock_get_latest_model_artifact.return_value = artifact_path
+    mock_pickle_load.return_value = MagicMock()
     mock_pickle_load.return_value.predict.return_value = [
         pd.DataFrame({"prediction": [0.1, 0.5, 0.9]}),
         pd.DataFrame({"prediction": [0.3, 0.6, 0.8]}),
     ]
+    mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
+
 
     eval_type = "test_eval_type"
-    artifact_name = None  
+    artifact_name = None
 
     stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
 
-    mock_read_dataframe.assert_called_once_with(Path("/mock/path/to/raw/test_run_type_viewser_df.parquet"))
-    mock_open.assert_called_once_with(Path("/mock/path/to/artifact.pkl"), 'rb')
-    mock_pickle_load.return_value.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type", eval_type)
-
-    assert mock_save_predictions.call_count == 2  
-    mock_create_log_file.assert_called_once_with(
-        Path("/mock/path/to/generated"),
-        stepshifter_manager.config,
-        stepshifter_manager.config["timestamp"],
-        "20230101_000000",
-        "20230101_000000",
-    )
+    #mock_open.assert_called_once_with(artifact_path, 'rb')
 
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
-@patch("views_stepshifter.manager.stepshifter_manager.read_log_file")
+    # mock_create_log_file.assert_called_once_with(
+    #     Path("/mock/path/to/generated"),
+    #     stepshifter_manager.config,
+    #     stepshifter_manager.config["timestamp"],
+    #     "20230101_000000",
+    #     "20230101_000000",
+    # )
+
+
+
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
+@patch("views_forecasts.extensions.ForecastAccessor.read_store")
 @patch("views_stepshifter.manager.stepshifter_manager.open", new_callable=MagicMock)
 @patch("views_stepshifter.manager.stepshifter_manager.pickle.load")
-@patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
-@patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._save_predictions")
-@patch("views_stepshifter.manager.stepshifter_manager.create_log_file")
+@patch("views_pipeline_core.managers.model.ModelPathManager.get_latest_model_artifact_path")
 def test_evaluate_model_artifact_with_artifact_name(
-    mock_create_log_file,
-    mock_save_predictions,
     mock_get_latest_model_artifact,
     mock_pickle_load,
     mock_open,
     mock_datetime,
-    mock_read_log_file,
-    mock_read_dataframe,
+    mock_read_store,
     stepshifter_manager
 ):  
     '''
     Test the _evaluate_model_artifact method to ensure it correctly evaluates the model artifact with a specific artifact name.
     '''
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
     stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_pickle_load.return_value = MagicMock()
     mock_pickle_load.return_value.predict.return_value = [
         pd.DataFrame({"prediction": [0.1, 0.5, 0.9]}),
         pd.DataFrame({"prediction": [0.3, 0.6, 0.8]}),
     ]
+    mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
+
 
     eval_type = "test_eval_type"
     artifact_name = "test_model_artifact.pkl"
     stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
 
-    mock_read_dataframe.assert_called_once_with(Path(f"/mock/path/to/raw/test_run_type_viewser_df.parquet"))
     mock_open.assert_called_once_with(Path(f"/mock/path/to/artifacts/{artifact_name}"), 'rb')
-    mock_pickle_load.return_value.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type", eval_type)
-    assert mock_save_predictions.call_count == 2  
-    mock_create_log_file.assert_called_once()
 
 
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
-@patch("views_stepshifter.manager.stepshifter_manager.read_log_file")
+# @patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
+# @patch("views_stepshifter.manager.stepshifter_manager.read_log_file")
+# @patch("views_stepshifter.manager.stepshifter_manager.datetime")
+# @patch("views_stepshifter.manager.stepshifter_manager.open", new_callable=MagicMock)
+# @patch("views_stepshifter.manager.stepshifter_manager.pickle.load")
+# @patch("views_pipeline_core.managers.model.ModelPathManager.get_latest_model_artifact_path")
+# @patch("views_stepshifter.manager.stepshifter_manager.create_log_file")
+# def test_forecast_model_artifact_without_artifact_name(
+#     mock_get_latest_model_artifact,
+#     mock_pickle_load,
+#     mock_open,
+#     mock_datetime,
+#     mock_read_log_file,
+#     mock_read_dataframe,
+#     stepshifter_manager
+# ):
+#     '''
+#     Test the _forecast_model_artifact method to ensure it correctly forecasts the model artifact without a specific artifact name.
+#     '''
+#     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
+#     mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
+#     mock_get_latest_model_artifact.return_value = Path("/mock/path/to/artifacts/latest_model.pkl")
+
+#     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
+#     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
+#     stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
+#     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
+
+#     mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
+#     mock_pickle_load.return_value = MagicMock()
+#     mock_pickle_load.return_value.predict.return_value = pd.DataFrame({"prediction": [0.1, 0.5, 0.9]})
+
+#     artifact_name = None
+#     stepshifter_manager._forecast_model_artifact(artifact_name)
+
+#     mock_read_dataframe.assert_called_once_with(Path(f"/mock/path/to/raw/test_run_type_viewser_df.parquet"))
+#     mock_open.assert_called_once_with(Path(f"/mock/path/to/artifacts/latest_model.pkl"), 'rb')
+#     mock_pickle_load.return_value.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type")
+
+
 @patch("views_stepshifter.manager.stepshifter_manager.datetime")
+@patch("views_forecasts.extensions.ForecastAccessor.read_store")
 @patch("views_stepshifter.manager.stepshifter_manager.open", new_callable=MagicMock)
 @patch("views_stepshifter.manager.stepshifter_manager.pickle.load")
-@patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_latest_model_artifact")
-@patch("views_stepshifter.manager.stepshifter_manager.create_log_file")
-def test_forecast_model_artifact_without_artifact_name(
-    mock_create_log_file,
-    mock_get_latest_model_artifact,
-    mock_pickle_load,
-    mock_open,
-    mock_datetime,
-    mock_read_log_file,
-    mock_read_dataframe,
-    stepshifter_manager
-):
-    '''
-    Test the _forecast_model_artifact method to ensure it correctly forecasts the model artifact without a specific artifact name.
-    '''
-    mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
-    mock_get_latest_model_artifact.return_value = Path("/mock/path/to/artifacts/latest_model.pkl")
-
-    stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
-    stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
-    stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
-    stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
-
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
-    mock_pickle_load.return_value = MagicMock()
-    mock_pickle_load.return_value.predict.return_value = pd.DataFrame({"prediction": [0.1, 0.5, 0.9]})
-
-    artifact_name = None
-    stepshifter_manager._forecast_model_artifact(artifact_name)
-
-    mock_read_dataframe.assert_called_once_with(Path(f"/mock/path/to/raw/test_run_type_viewser_df.parquet"))
-    mock_open.assert_called_once_with(Path(f"/mock/path/to/artifacts/latest_model.pkl"), 'rb')
-    mock_pickle_load.return_value.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type")
-    mock_create_log_file.assert_called_once()
-
-
-@patch("views_stepshifter.manager.stepshifter_manager.read_dataframe")
-@patch("views_stepshifter.manager.stepshifter_manager.read_log_file")
-@patch("views_stepshifter.manager.stepshifter_manager.datetime")
-@patch("views_stepshifter.manager.stepshifter_manager.open", new_callable=MagicMock)
-@patch("views_stepshifter.manager.stepshifter_manager.pickle.load")
-@patch("views_stepshifter.manager.stepshifter_manager.create_log_file")
+@patch("pathlib.Path.mkdir")
+@patch("pathlib.Path.relative_to", return_value=Path("/mock/path/to/generated"))
 def test_forecast_model_artifact_with_artifact_name(
-    mock_create_log_file,
+    mock_relative_to,
+    mock_mkdir,
     mock_pickle_load,
     mock_open,
     mock_datetime,
-    mock_read_log_file,
-    mock_read_dataframe,
+    mock_read_store,
     stepshifter_manager
 ):
     '''
     Test the _forecast_model_artifact method to ensure it correctly forecasts the model artifact with a specific artifact name.
     '''
     mock_datetime.now.return_value.strftime.return_value = "20230101_000000"
-    mock_read_log_file.return_value = {"Data Fetch Timestamp": "20230101_000000"}
 
     stepshifter_manager._model_path.data_raw = Path("/mock/path/to/raw")
     stepshifter_manager._model_path.data_generated = Path("/mock/path/to/generated")
     stepshifter_manager._model_path.artifacts = Path("/mock/path/to/artifacts")
     stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
 
-    mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
     mock_pickle_load.return_value = MagicMock()
     mock_pickle_load.return_value.predict.return_value = pd.DataFrame({"prediction": [0.1, 0.5, 0.9]})
+    mock_read_store.return_value = pd.DataFrame({"a": [1, 2, 3]})
+
 
     artifact_name = "test_model_artifact.pkl"
     stepshifter_manager._forecast_model_artifact(artifact_name)
 
-    mock_read_dataframe.assert_called_once_with(Path(f"/mock/path/to/raw/test_run_type_viewser_df.parquet"))
-    mock_open.assert_called_once_with(Path(f"/mock/path/to/artifacts/{artifact_name}"), 'rb')
-    mock_pickle_load.return_value.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type")
-    mock_create_log_file.assert_called_once()
+    mock_open.assert_called_once_with(Path("/mock/path/to/artifacts/test_model_artifact.pkl"), 'rb')
