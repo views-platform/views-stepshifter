@@ -17,7 +17,8 @@ def config():
         'depvar': 'target',
         'model_reg': 'LinearRegressionModel',
         'parameters': {'param1': 1, 'param2': 2},
-        'sweep': False
+        'sweep': False,
+        "metrics": ["test_metric"]
     }
 
 @pytest.fixture

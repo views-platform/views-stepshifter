@@ -23,7 +23,7 @@ class StepshifterModel:
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
         self._metrics = config["metrics"]
-        self._depvar = config["depvar"]
+        
 
     @staticmethod
     def _resolve_estimator(func_name: str):
@@ -176,8 +176,9 @@ class StepshifterModel:
         if run_type != "forecasting":
             preds = []
             if eval_type == "standard":
-                for sequence_number in range(
-                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                for sequence_number in tqdm.tqdm(
+                    range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                    desc="Predicting for sequence number",
                 ):
                     pred_by_step = [
                         self._predict_by_step(self._models[step], step, sequence_number)
