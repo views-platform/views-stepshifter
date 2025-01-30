@@ -160,20 +160,32 @@ This project is licensed under the [LICENSE](/LICENSE) file.
 
 ## 💬 Acknowledgements  
 
-<div style="width: 100%; max-width: 1500px; overflow: hidden; margin-top: 50px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 20px; padding: 20px;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/RJ-logo-1.png?ssl=1" alt="RJ Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/NorskaForskningsradet_250px-1.png?w=263&ssl=1" alt="Norska Forskningsradet Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/ESCWA-Logo.png?resize=1024%2C377&ssl=1" alt="ESCWA Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/VR.png?ssl=1" alt="VR Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2021/07/UNHCR-logo.png?w=400&ssl=1" alt="UNHCR Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/MISTRA_green.png?w=250&ssl=1" alt="MISTRA Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2022/02/FCDO-logo.png?w=800&ssl=1" alt="FCDO Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/craFD.png?w=477&ssl=1" alt="craFD Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2020/09/cropped-UU_logo_RGB.png?w=500&ssl=1" alt="UU Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2022/02/PRIO-regular-logo.png?resize=1024%2C450&ssl=1" alt="PRIO Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2020/07/EU-och-ERC-transparent.png?resize=1024%2C425&ssl=1" alt="EU ERC Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto;">
-</div>
 
+<div style="width: 100%; max-width: 1500px; overflow: hidden; margin-top: 50px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; padding: 10px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/RJ-logo-1.png?ssl=1" alt="RJ Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/NorskaForskningsradet_250px-1.png?w=263&ssl=1" alt="Norska Forskningsradet Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/ESCWA-Logo.png?resize=1024%2C377&ssl=1" alt="ESCWA Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/VR.png?ssl=1" alt="VR Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2021/07/UNHCR-logo.png?w=400&ssl=1" alt="UNHCR Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/MISTRA_green.png?w=250&ssl=1" alt="MISTRA Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2022/02/FCDO-logo.png?w=800&ssl=1" alt="FCDO Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/craFD.png?w=477&ssl=1" alt="craFD Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2020/09/cropped-UU_logo_RGB.png?w=500&ssl=1" alt="UU Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2022/02/PRIO-regular-logo.png?resize=1024%2C450&ssl=1" alt="PRIO Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+  <img src="https://i0.wp.com/viewsforecasting.org/wp-content/uploads/2020/07/EU-och-ERC-transparent.png?resize=1024%2C425&ssl=1" alt="EU ERC Logo" style="max-height: 80px; max-width: 150px; width: auto; height: auto; background:white; padding:10px; border-radius:5px;">
+  
+</div>
 
 
 Special thanks to the **VIEWS MD&D Team** for their collaboration and support.  
