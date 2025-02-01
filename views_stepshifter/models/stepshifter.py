@@ -1,6 +1,8 @@
 import pickle
-import numpy as np
-import pandas as pd
+# import numpy as np
+import cupy as np
+import cudf as pd
+# import pandas as pd
 import logging
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
@@ -8,6 +10,7 @@ from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -117,13 +120,19 @@ class StepshifterModel:
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
-
+        device = "mps"
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
             ]
             for series in self._series
         ]
+        # Move target to GPU
+        target = [t.to(device) for t in target]
+
+        # Move model to GPU
+        model.to(device)
+
         ts_pred = model.predict(
             n=step,
             series=target,
