@@ -1,6 +1,8 @@
 import functools
-import numpy as np
-import pandas as pd
+# import numpy as np
+# import pandas as pd
+from views_pipeline_core.hpc import numpy as np
+from views_pipeline_core.hpc import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)

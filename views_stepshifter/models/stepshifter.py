@@ -1,7 +1,7 @@
 import pickle
 # import numpy as np
-import cupy as np
-import cudf as pd
+from views_pipeline_core.hpc import numpy as np
+from views_pipeline_core.hpc import pandas as pd
 # import pandas as pd
 import logging
 from darts import TimeSeries
@@ -121,19 +121,14 @@ class StepshifterModel:
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
-        device = "mps"
+
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
             ]
             for series in self._series
         ]
-        # Move target to GPU
-        target = [t.to(device) for t in target]
-
-        # Move model to GPU
-        model.to(device)
-
+        
         ts_pred = model.predict(
             n=step,
             series=target,

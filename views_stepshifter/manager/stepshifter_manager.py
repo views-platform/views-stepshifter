@@ -5,8 +5,10 @@ from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 import logging
 import pickle
-import pandas as pd
-import numpy as np
+from views_pipeline_core.hpc import numpy as np
+from views_pipeline_core.hpc import pandas as pd
+# import pandas as pd
+# import numpy as np
 from typing import Union, Optional, List, Dict
 
 logger = logging.getLogger(__name__)

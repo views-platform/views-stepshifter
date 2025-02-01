@@ -2,7 +2,9 @@ from views_pipeline_core.managers.model import ModelManager
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
-import pandas as pd
+# import pandas as pd
+# from views_pipeline_core.hpc import numpy as np
+from views_pipeline_core.hpc import pandas as pd
 from typing import List, Dict
 import logging
 import tqdm
