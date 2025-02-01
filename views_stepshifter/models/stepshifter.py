@@ -91,7 +91,8 @@ class StepshifterModel:
         )
         missing_combinations = all_combinations.difference(df.index)
 
-        missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
+        # missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
+        missing_df = pd.DataFrame([0] * len(missing_combinations), index=missing_combinations, columns=df.columns) # for cudf
         df = pd.concat([df, missing_df]).sort_index()
 
         return df
