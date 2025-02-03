@@ -13,7 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class StepshifterManager(ModelManager):
-    def __init__(self, model_path: ModelPathManager, wandb_notifications: bool = True, use_prediction_store: bool = True) -> None:
+    def __init__(
+        self,
+        model_path: ModelPathManager,
+        wandb_notifications: bool = True,
+        use_prediction_store: bool = True,
+    ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
 
@@ -106,14 +111,16 @@ class StepshifterManager(ModelManager):
             stepshift_model.save(path_artifacts / model_filename)
         return stepshift_model
 
-    def _evaluate_model_artifact(self, eval_type: str, artifact_name: str) -> List[pd.DataFrame]:
+    def _evaluate_model_artifact(
+        self, eval_type: str, artifact_name: str
+    ) -> List[pd.DataFrame]:
         """
         Evaluate the model artifact based on the evaluation type and the artifact name.
 
         Args:
             eval_type: The evaluation type
             artifact_name: The name of the artifact to evaluate
-            
+
         Returns:
             A list of DataFrames containing the evaluation results
         """
@@ -133,7 +140,7 @@ class StepshifterManager(ModelManager):
             # use the latest model artifact based on the run type
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact"
-                )
+            )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
@@ -152,7 +159,7 @@ class StepshifterManager(ModelManager):
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
         """
         Forecast using the model artifact.
-        
+
         Args:
             artifact_name: The name of the artifact to use for forecasting
 
@@ -175,7 +182,7 @@ class StepshifterManager(ModelManager):
             # use the latest model artifact based on the run type
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact"
-                )
+            )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
@@ -209,4 +216,3 @@ class StepshifterManager(ModelManager):
         ]
 
         return df_predictions
-
