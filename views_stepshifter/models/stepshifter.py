@@ -8,10 +8,16 @@ from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
-
+import torch
 logger = logging.getLogger(__name__)
 
-
+def is_cuda_available():
+    if torch.cuda.is_available():
+        logger.info("CUDA is supported and available.")
+        return True
+    else:
+        logger.warning("CUDA is not supported or available.")
+        return False
 class StepshifterModel:
 
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
@@ -33,12 +39,17 @@ class StepshifterModel:
 
         match func_name:
             case "LinearRegressionModel":
+
                 from darts.models import LinearRegressionModel
 
                 return LinearRegressionModel
             case "RandomForestModel":
-                from darts.models import RandomForest
-
+                if is_cuda_available():
+                    logger.info("CUDA is available. Using CUDA RandomForest.")
+                    from views_stepshifter.cuda.models import RandomForest
+                else:
+                    logger.info("CUDA is not available. Using CPU RandomForest.")
+                    from darts.models import RandomForest
                 return RandomForest
             case "LightGBMModel":
                 from darts.models import LightGBMModel
