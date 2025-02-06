@@ -8,6 +8,7 @@ import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
+from views_stepshifter.models.shurf import StepShiftedHurdleUncertainRF
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class StepshifterManager(ModelManager):
     def __init__(self, model_path: ModelPathManager, wandb_notifications: bool = True, use_prediction_store: bool = True) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
+        self._is_shurf = self._config_meta["algorithm"] == "SHURF"
 
     @staticmethod
     def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -72,6 +74,8 @@ class StepshifterManager(ModelManager):
         """
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
+        elif self._is_shurf:
+            model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
         else:
             self.config["model_reg"] = self.config["algorithm"]
             model = StepshifterModel(self.config, partitioner_dict)
