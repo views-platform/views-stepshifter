@@ -17,7 +17,7 @@ References
 
 from typing import Optional
 
-
+from xgboost import XGBRFRegressor as RandomForestRegressor
 
 from darts.logging import get_logger
 from darts.models.forecasting.regression_model import (
@@ -25,16 +25,8 @@ from darts.models.forecasting.regression_model import (
     LAGS_TYPE,
     RegressionModel,
 )
-from utils import isCUDA
+
 logger = get_logger(__name__)
-
-if isCUDA():
-    from xgboost import XGBRFRegressor as RandomForestRegressor
-    logger.info("\033[92mUsing CUDA XGBRFRegressor\033[0m")
-else:
-    logger.info("\033[91mUsing CPU RandomForestRegressor\033[0m")
-    from sklearn.ensemble import RandomForestRegressor
-
 
 
 class RandomForest(RegressionModel):
@@ -189,4 +181,3 @@ class RandomForest(RegressionModel):
             model=RandomForestRegressor(**kwargs),
             use_static_covariates=use_static_covariates,
         )
-
