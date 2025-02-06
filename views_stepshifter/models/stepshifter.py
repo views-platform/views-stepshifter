@@ -208,10 +208,14 @@ class StepshifterModel:
                     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                     desc="Predicting for sequence number",
                 ):
-                    pred_by_step = [
-                        self._predict_by_step(self._models[step], step, sequence_number)
-                        for step in self._steps
-                    ]
+                    # pred_by_step = [
+                    #     self._predict_by_step(self._models[step], step, sequence_number)
+                    #     for step in self._steps
+                    # ]
+                    pred_by_step = []
+                    for step in tqdm.tqdm(self._steps, desc="Predicting for step"):
+                        pred = self._predict_by_step(self._models[step], step, sequence_number)
+                        pred_by_step.append(pred)
                     pred = pd.concat(pred_by_step, axis=0)
                     preds.append(pred)
         else:
