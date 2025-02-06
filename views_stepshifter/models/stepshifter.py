@@ -55,6 +55,7 @@ class StepshifterModel:
                     from darts.models import RegressionModel
                     from xgboost import XGBRFRegressor
                     model = RegressionModel(model=XGBRFRegressor)
+                    logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
                     return model
 
                 else:
