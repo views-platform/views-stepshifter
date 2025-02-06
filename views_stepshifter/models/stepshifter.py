@@ -50,7 +50,7 @@ class StepshifterModel:
                 if StepshifterModel.get_device_params()["device"] == "cuda":
                     from xgboost import XGBRFRegressor
                     from darts.models import RandomForest
-                    params = {"tree_method": "gpu_hist", "device": "cuda", "model": XGBRFRegressor}
+                    params = {"device": "cuda", "model": XGBRFRegressor}
                     return partial(RandomForest, **params)
                 else:
                     logger.info("\033[92mUsing CPU for RandomForest\033[0m")
