@@ -8,6 +8,8 @@ from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
+import torch
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,15 @@ class StepshifterModel:
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
         self._metrics = config["metrics"]
-        
+
+    @staticmethod
+    def get_device_params():
+        if torch.cuda.is_available():
+            return {"device": "cuda"}
+        elif torch.backends.mps.is_available():
+            return {"device": "mps"}
+        else:
+            return {}
 
     @staticmethod
     def _resolve_estimator(func_name: str):
@@ -37,17 +47,35 @@ class StepshifterModel:
 
                 return LinearRegressionModel
             case "RandomForestModel":
-                from darts.models import RandomForest
-
-                return RandomForest
+                if StepshifterModel.get_device_params()["device"] == "cuda":
+                    from xgboost import XGBRFRegressor
+                    from darts.models import RandomForest
+                    params = {"tree_method": "gpu_hist", "device": "cuda", "model": XGBRFRegressor}
+                    return partial(RandomForest, **params)
+                else:
+                    logger.info("\033[92mUsing CPU for RandomForest\033[0m")
+                    from darts.models import RandomForest
+                    return RandomForest
             case "LightGBMModel":
                 from darts.models import LightGBMModel
 
-                return LightGBMModel
+                if StepshifterModel.get_device_params()["device"] == "cuda":
+                    logger.info("\033[92mUsing CUDA for LightGBMModel\033[0m")
+                    params = {"device": "cuda"}
+                else:
+                    logger.info("\033[91mUsing CPU for LightGBMModel\033[0m")
+                    params = {}
+                return partial(LightGBMModel, **params)
             case "XGBModel":
-                from darts.models import XGBModel
+                from darts.models import XGBModel      
 
-                return XGBModel
+                if StepshifterModel.get_device_params()["device"] == "cuda":
+                    logger.info("\033[92mUsing CUDA for XGBModel\033[0m")
+                    params = {"tree_method": "gpu_hist", "device": "cuda"}
+                else:
+                    logger.info("\033[91mUsing CPU for XGBModel\033[0m")
+                    params = {}
+                return partial(XGBModel, **params)
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
@@ -161,8 +189,9 @@ class StepshifterModel:
         ):  # ncols=100
             model = self._reg(lags_past_covariates=[-step], **self._params)
             # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
-            model.fit(self._target_train, 
-                      past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+            model.fit(
+                self._target_train, past_covariates=self._past_cov
+            )  # Darts will automatically ignore the parts of past_covariates that go beyond the training period
             self._models[step] = model
         self.is_fitted_ = True
 
