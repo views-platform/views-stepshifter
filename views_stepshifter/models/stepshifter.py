@@ -48,15 +48,9 @@ class StepshifterModel:
                 return LinearRegressionModel
             case "RandomForestModel":
                 if StepshifterModel.get_device_params()["device"] == "cuda":
-                    # 
-                    # from darts.models import RandomForest
-                    # params = {"device": "cuda", "model": XGBRFRegressor}
-                    # model = partial(XGBRFRegressor, **params)
-                    from darts.models import RegressionModel
-                    from xgboost import XGBRFRegressor
-                    model = RegressionModel(model=XGBRFRegressor)
+                    from views_stepshifter.cuda.models import RandomForest
                     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                    return model
+                    return RandomForest
 
                 else:
                     logger.info("\033[92mUsing CPU for RandomForest\033[0m")
