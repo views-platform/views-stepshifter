@@ -33,8 +33,7 @@ class StepshifterManager(ModelManager):
         """
 
         # post-process: replace negative values with 0
-        # df = df.replace([np.inf, -np.inf], 0)
-        df = df.replace({np.inf: 0, -np.inf: 0})
+        df = df.replace([np.inf, -np.inf], 0)
         df = df.mask(df < 0, 0)
         return df
 
