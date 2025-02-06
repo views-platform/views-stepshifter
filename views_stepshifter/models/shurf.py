@@ -109,6 +109,8 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             self._submodel_list.append(submodel_dict)
             logger.info(f"Submodel {i+1}/{self._submodels_to_train} trained successfully")
         self.is_fitted_ = True
+        
+    
 
     @views_validate
     def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
@@ -176,7 +178,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                             # Draw samples from the classifier; 0/1 according to the classifier's prediction
                             pred_concat_binary_drawn = pred_concat_binary.where(np.random.binomial(n=1,p=pred_concat_binary)==1,0) 
                             if self._draw_dist == 'Poisson':
-                                pred_concat_positive_drawn = np.random.poisson(final_pred)
+                                pred_concat_positive_drawn = np.random.poisson(pred_concat_positive)
                                 print(self._draw_dist,'pred_concat_positive_drawn')
                             if self._draw_dist == 'Lognormal':
                                 # Draw from lognormal only for those with predictions larger than zero
@@ -191,10 +193,10 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                             # Combine the binary and positive predictions
                             sample_pred = pred_concat_binary_drawn * pred_concat_positive_drawn
                             sample_pred['submodel'] = submodel_number
-                            sample_pred['sample'] = sample_number 
+                            sample_pred['draw'] = sample_number 
                             # Add 'sample_number' to the indices of the sample predictions DataFrame:
                             
-                            sample_pred.set_index(['sample'],append=True, inplace=True)
+                            sample_pred.set_index(['draw'],append=True, inplace=True)
                             print('sample_pred')
                             print(sample_pred)
                             # From old SHURF code:
