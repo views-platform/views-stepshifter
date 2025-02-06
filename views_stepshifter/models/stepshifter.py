@@ -153,7 +153,7 @@ class StepshifterModel:
             index=pd.MultiIndex.from_tuples(
                 index_tuples, names=[self._time, self._level]
             ),
-            columns=[self._depvar],
+            columns=[f"pred_{self._depvar}"],
         )
 
         return df_preds.sort_index()

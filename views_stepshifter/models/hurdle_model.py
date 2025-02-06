@@ -114,10 +114,8 @@ class HurdleModel(StepshifterModel):
             final_preds = []
             if eval_type == "standard":
                 for sequence_number in tqdm.tqdm(
-                    range(
-                        ModelManager._resolve_evaluation_sequence_number(eval_type),
-                        desc="Predicting for sequence number",
-                    )
+                    range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                    desc="Predicting for sequence number",
                 ):
                     pred_by_step_binary = [
                         self._predict_by_step(
