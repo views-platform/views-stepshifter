@@ -215,10 +215,14 @@ class StepshifterModel:
                     pred = pd.concat(pred_by_step, axis=0)
                     preds.append(pred)
         else:
-            preds = [
-                self._predict_by_step(self._models[step], step, 0)
-                for step in self._steps
-            ]
+            # preds = [
+            #     self._predict_by_step(self._models[step], step, 0)
+            #     for step in self._steps
+            # ]
+            preds = []
+            for step in tqdm.tqdm(range(self._steps), desc="Predicting for step"):
+                pred = self._predict_by_step(self._models[step], step, 0)
+                preds.append(pred)
             preds = pd.concat(preds, axis=0)
         return preds
 
