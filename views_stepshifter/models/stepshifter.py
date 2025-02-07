@@ -63,11 +63,12 @@ class StepshifterModel:
 
                 if StepshifterModel.get_device_params()["device"] == "cuda":
                     logger.info("\033[92mUsing CUDA for LightGBMModel\033[0m")
-                    params = {"device": "cuda"}
+                    cuda_params = {"device": "cuda"}
+                    return partial(LightGBMModel, **cuda_params)
                 else:
                     logger.info("\033[91mUsing CPU for LightGBMModel\033[0m")
-                    params = {}
-                return partial(LightGBMModel, **params)
+                    return LightGBMModel
+                
             case "XGBModel":
                 from darts.models import XGBModel
                 device_params = StepshifterModel.get_device_params()
