@@ -70,14 +70,15 @@ class StepshifterModel:
                 return partial(LightGBMModel, **params)
             case "XGBModel":
                 from darts.models import XGBModel
-
-                if StepshifterModel.get_device_params()["device"] == "cuda":
+                device_params = StepshifterModel.get_device_params()
+                if device_params.get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBModel\033[0m")
-                    params = {"tree_method": "gpu_hist", "device": "cuda"}
+                    # Add CUDA-specific parameters
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda"}
+                    return partial(XGBModel, **cuda_params)
                 else:
                     logger.info("\033[91mUsing CPU for XGBModel\033[0m")
-                    params = {}
-                return partial(XGBModel, **params)
+                    return XGBModel
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
