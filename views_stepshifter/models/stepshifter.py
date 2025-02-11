@@ -1,3 +1,4 @@
+import os
 import pickle
 import numpy as np
 import pandas as pd
@@ -126,8 +127,9 @@ class StepshifterModel:
         """
 
         # logger.info(f"Predicting for step {step} and sequence number {sequence_number}")
+        slice_end = self._train_end + 1 + sequence_number
         target = [
-            series.slice(self._train_start, self._train_end + 1 + sequence_number)[
+            series.slice(self._train_start, slice_end)[
                 self._depvar
             ]
             for series in self._series
@@ -140,7 +142,6 @@ class StepshifterModel:
             show_warnings=False,
         )
 
-        # process the predictions
         index_tuples, df_list = [], []
         test_index = self._test_start + step + sequence_number - 1
         for pred in ts_pred:
@@ -181,6 +182,17 @@ class StepshifterModel:
         if run_type != "forecasting":
             preds = []
             if eval_type == "standard":
+                # for sequence_number in tqdm.tqdm(
+                #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                #     desc="Predicting for sequence number",
+                # ):
+                #     pred_by_step = [
+                #         self._predict_by_step(self._models[step], step, sequence_number)
+                #         for step in self._steps
+                #     ]
+                #     pred = pd.concat(pred_by_step, axis=0)
+                #     preds.append(pred)
+
                 with concurrent.futures.ProcessPoolExecutor() as executor:
                     for sequence_number in tqdm.tqdm(
                         range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
