@@ -9,6 +9,7 @@ from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ class StepshifterModel:
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
 
+        # logger.info(f"Predicting for step {step} and sequence number {sequence_number}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
@@ -140,10 +142,9 @@ class StepshifterModel:
 
         # process the predictions
         index_tuples, df_list = [], []
+        test_index = self._test_start + step + sequence_number - 1
         for pred in ts_pred:
-            df_pred = pred.pd_dataframe().loc[
-                [self._test_start + step + sequence_number - 1]
-            ]
+            df_pred = pred.pd_dataframe().loc[[test_index]]
             level = int(pred.static_covariates.iat[0, 0])
             index_tuples.extend([(month, level) for month in df_pred.index])
             df_list.append(df_pred.values)
@@ -175,22 +176,28 @@ class StepshifterModel:
     def predict(
         self, df: pd.DataFrame, run_type: str, eval_type: str = "standard"
     ) -> pd.DataFrame:
-        df = self._process_data(df)
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
             preds = []
             if eval_type == "standard":
-                for sequence_number in tqdm.tqdm(
-                    range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
-                    desc="Predicting for sequence number",
-                ):
-                    pred_by_step = [
-                        self._predict_by_step(self._models[step], step, sequence_number)
-                        for step in self._steps
-                    ]
-                    pred = pd.concat(pred_by_step, axis=0)
-                    preds.append(pred)
+                with concurrent.futures.ProcessPoolExecutor() as executor:
+                    for sequence_number in tqdm.tqdm(
+                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        desc="Predicting for sequence number",
+                    ):
+                        futures = [
+                            executor.submit(self._predict_by_step, self._models[step], step, sequence_number)
+                            for step in self._steps
+                        ]
+                        results = []
+
+                        for future in concurrent.futures.as_completed(futures):
+                            result = future.result()
+                            results.append(result)
+                        pred = pd.concat(results, axis=0)
+                        preds.append(pred)
+
         else:
             preds = [
                 self._predict_by_step(self._models[step], step, 0)
