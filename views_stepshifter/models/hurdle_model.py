@@ -7,6 +7,7 @@ import pandas as pd
 from typing import List, Dict
 import logging
 import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class HurdleModel(StepshifterModel):
         self._reg_params = self._get_parameters(config)["reg"]
         self._clf = self._resolve_clf_model(config["model_clf"])
         self._reg = self._resolve_reg_model(config["model_reg"])
+        # print("reg", self._reg)
+        # print("clf", self._clf)
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""
@@ -77,7 +80,7 @@ class HurdleModel(StepshifterModel):
             s.map(lambda x: (x > 0).astype(float)) for s in self._target_train
         ]
 
-        # Positive outcome (for cases where target > threshold)
+        # Positive outcome (for cases where target > 0)
         target_pos, past_cov_pos = zip(
             *[
                 (t, p)
@@ -103,36 +106,51 @@ class HurdleModel(StepshifterModel):
             self._models[step] = (binary_model, positive_model)
         self.is_fitted_ = True
 
-    @views_validate
     def predict(
-        self, df: pd.DataFrame, run_type: str, eval_type: str = "standard"
+        self, run_type: str, eval_type: str = "standard"
     ) -> pd.DataFrame:
-        df = self._process_data(df)
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
             final_preds = []
             if eval_type == "standard":
-                for sequence_number in tqdm.tqdm(
-                    range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
-                    desc="Predicting for sequence number",
-                ):
-                    pred_by_step_binary = [
-                        self._predict_by_step(
-                            self._models[step][0], step, sequence_number
-                        )
-                        for step in self._steps
-                    ]
-                    pred_by_step_positive = [
-                        self._predict_by_step(
-                            self._models[step][1], step, sequence_number
-                        )
-                        for step in self._steps
-                    ]
-                    final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(
-                        pred_by_step_positive, axis=0
-                    )
-                    final_preds.append(final_pred)
+                # for sequence_number in tqdm.tqdm(
+                #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                #     desc="Predicting for sequence number",
+                # ):
+                #     pred_by_step_binary = [
+                #         self._predict_by_step(
+                #             self._models[step][0], step, sequence_number
+                #         )
+                #         for step in self._steps
+                #     ]
+                #     pred_by_step_positive = [
+                #         self._predict_by_step(
+                #             self._models[step][1], step, sequence_number
+                #         )
+                #         for step in self._steps
+                #     ]
+                #     final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+                #     final_preds.append(final_pred)
+                with ProcessPoolExecutor() as executor:
+                    for sequence_number in tqdm.tqdm(
+                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        desc="Predicting for sequence number",
+                    ):
+                        future_binary = {
+                            step: executor.submit(self._predict_by_step, self._models[step][0], step, sequence_number)
+                            for step in self._steps
+                        }
+                        future_positive = {
+                            step: executor.submit(self._predict_by_step, self._models[step][1], step, sequence_number)
+                            for step in self._steps
+                        }
+
+                        pred_by_step_binary = [future_binary[step].result() for step in self._steps]
+                        pred_by_step_positive = [future_positive[step].result() for step in self._steps]
+
+                        final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
+                        final_preds.append(final_pred)
 
         else:
             pred_by_step_binary = [

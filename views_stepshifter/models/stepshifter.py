@@ -1,4 +1,3 @@
-import os
 import pickle
 import numpy as np
 import pandas as pd
@@ -10,7 +9,7 @@ from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
-import concurrent.futures
+from concurrent.futures import ProcessPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +172,8 @@ class StepshifterModel:
             self._models[step] = model
         self.is_fitted_ = True
 
-    @views_validate
     def predict(
-        self, df: pd.DataFrame, run_type: str, eval_type: str = "standard"
+        self, run_type: str, eval_type: str = "standard"
     ) -> pd.DataFrame:
         check_is_fitted(self, "is_fitted_")
 
@@ -193,7 +191,7 @@ class StepshifterModel:
                 #     pred = pd.concat(pred_by_step, axis=0)
                 #     preds.append(pred)
 
-                with concurrent.futures.ProcessPoolExecutor() as executor:
+                with ProcessPoolExecutor() as executor:
                     for sequence_number in tqdm.tqdm(
                         range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
@@ -202,12 +200,8 @@ class StepshifterModel:
                             executor.submit(self._predict_by_step, self._models[step], step, sequence_number)
                             for step in self._steps
                         ]
-                        results = []
-
-                        for future in concurrent.futures.as_completed(futures):
-                            result = future.result()
-                            results.append(result)
-                        pred = pd.concat(results, axis=0)
+                        pred_by_step = [future.result() for future in futures]  
+                        pred = pd.concat(pred_by_step, axis=0)
                         preds.append(pred)
 
         else:
