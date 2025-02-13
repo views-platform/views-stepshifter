@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock
 from views_stepshifter.models.stepshifter import StepshifterModel
+from views_pipeline_core.managers.model import ModelManager
 
 @pytest.fixture
 def config():
@@ -147,10 +148,18 @@ def test_fit(config, partitioner_dict):
     # Convert columns to np.float64
     df = df.astype(np.float64)
 
-    model = StepshifterModel(config, partitioner_dict)
-    with patch.object(model, '_reg', return_value=MagicMock()) as mock_reg:
+    with patch("views_stepshifter.models.stepshifter.StepshifterModel._resolve_reg_model") as mock_resolve_reg_model, \
+        patch("views_stepshifter.models.stepshifter.RegressionModel") as mock_RegressionModel:
+
+        model = StepshifterModel(config, partitioner_dict)
         model.fit(df)
-        assert model.is_fitted_
+        
+        assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
+        assert mock_RegressionModel.call_count == len(model._steps) 
+        assert mock_RegressionModel(lags_past_covariates=[-1], model=model._reg).fit.call_count == len(model._steps) 
+        assert model.is_fitted_ == True
+
+    
 
 def test_predict(config, partitioner_dict):
     """
@@ -172,19 +181,24 @@ def test_predict(config, partitioner_dict):
     # Convert columns to np.float64
     df = df.astype(np.float64)
 
-    model = StepshifterModel(config, partitioner_dict)
-    with patch.object(model, '_reg', return_value=MagicMock()) as mock_reg:
-        mock_model_instance = MagicMock()
-        mock_model_instance.predict.return_value = [
-            MagicMock(pd_dataframe=MagicMock(return_value=pd.DataFrame({
-                'pred_target': [0.1, 0.2]
-            }, index=[11, 12])))
-        ]
-        mock_reg.return_value = mock_model_instance
+    with patch("views_stepshifter.models.stepshifter.check_is_fitted") as mock_check_is_fitted, \
+        patch("views_stepshifter.models.stepshifter.StepshifterModel._predict_by_step") as mock_predict_by_step:
 
-        model.fit(df)
-        pred = model.predict('forecasting')
-        assert not pred.empty, "Predictions should not be empty"
+        mock_predict_by_step.return_value = df
+
+        model = StepshifterModel(config, partitioner_dict)
+    
+        for step in model._steps:
+            model._models[step] = MagicMock()
+        model.predict(df, "forecasting")
+        assert mock_predict_by_step.call_count == len(model._steps)
+        mock_predict_by_step.reset_mock()
+
+        model.predict(df, "validation")
+        assert mock_predict_by_step.call_count == len(model._steps) * ModelManager._resolve_evaluation_sequence_number("standard")
+
+        assert mock_check_is_fitted.call_count == 2
+
 
 def test_save(config, partitioner_dict, tmp_path):
     """
