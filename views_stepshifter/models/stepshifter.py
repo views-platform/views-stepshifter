@@ -56,7 +56,7 @@ class StepshifterModel:
                 return RandomForestRegressor(**self._params)
             case _:
                 raise ValueError(
-                    f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
+                    f"Model {func_name} is not a valid forecasting model or is not supported now. "
                     f"Change the model in the config file."
                 )
 

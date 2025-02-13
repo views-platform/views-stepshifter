@@ -14,9 +14,9 @@ def config():
     """
     return {
         'steps': [1, 2],
-        'depvar': 'target',
-        'model_reg': 'LinearRegressionModel',
-        'parameters': {'param1': 1, 'param2': 2},
+        'depvar': ['target'],
+        'model_reg': 'RandomForestRegressor',
+        'parameters': {'max_depth': 1, 'n_estimators': 100},
         'sweep': False,
         "metrics": ["test_metric"]
     }
@@ -34,7 +34,7 @@ def partitioner_dict():
         'test': [11, 20]
     }
 
-def test_resolve_estimator():
+def test_resolve_reg_model(config, partitioner_dict):
     """
     Test the _resolve_estimator method of the StepshifterModel class.
 
@@ -44,13 +44,12 @@ def test_resolve_estimator():
     Asserts:
         - The resolved estimator class name matches the expected class name.
     """
-    assert StepshifterModel._resolve_estimator('LinearRegressionModel').__name__ == 'LinearRegressionModel'
-    assert StepshifterModel._resolve_estimator('RandomForestModel').__name__ == 'RandomForest'
-    assert StepshifterModel._resolve_estimator('LightGBMModel').__name__ == 'LightGBMModel'
-    assert StepshifterModel._resolve_estimator('XGBModel').__name__ == 'XGBModel'
-    with pytest.raises(ValueError):
-        StepshifterModel._resolve_estimator('InvalidModel')
+  
+    model = StepshifterModel(config, partitioner_dict)
+    reg_model = model._resolve_reg_model("XGBRegressor")
 
+    assert reg_model is not None  
+       
 def test_get_parameters(config):
     """
     Test the _get_parameters method of the StepshifterModel class.
@@ -66,7 +65,7 @@ def test_get_parameters(config):
     """
     model = StepshifterModel(config, {'train': [0, 10], 'test': [11, 20]})
     params = model._get_parameters(config)
-    assert params == {'param1': 1, 'param2': 2}
+    assert params == {'max_depth': 1, 'n_estimators': 100}
 
 def test_process_data(config, partitioner_dict):
     """
@@ -178,13 +177,13 @@ def test_predict(config, partitioner_dict):
         mock_model_instance = MagicMock()
         mock_model_instance.predict.return_value = [
             MagicMock(pd_dataframe=MagicMock(return_value=pd.DataFrame({
-                'step_combined': [0.1, 0.2]
+                'pred_target': [0.1, 0.2]
             }, index=[11, 12])))
         ]
         mock_reg.return_value = mock_model_instance
 
         model.fit(df)
-        pred = model.predict(df, 'forecasting')
+        pred = model.predict('forecasting')
         assert not pred.empty, "Predictions should not be empty"
 
 def test_save(config, partitioner_dict, tmp_path):

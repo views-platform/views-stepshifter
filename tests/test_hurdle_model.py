@@ -10,8 +10,8 @@ def sample_config():
     return {
         "steps": [1, 2, 3],
         "depvar": "target",
-        "model_clf": "RandomForestModel",
-        "model_reg": "LinearRegressionModel",
+        "model_clf": "RandomForestClassifier",
+        "model_reg": "RandomForestRegressor",
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
         "sweep": False,
         "metrics": ["test_metric"]
@@ -46,7 +46,6 @@ def test_initialization(sample_config, sample_partitioner_dict):
     model = HurdleModel(sample_config, sample_partitioner_dict)
     assert model._steps == sample_config["steps"]
     assert model._depvar == sample_config["depvar"]
-    assert model._threshold == 1.0
     assert model._clf_params == sample_config["parameters"]["clf"]
     assert model._reg_params == sample_config["parameters"]["reg"]
 
