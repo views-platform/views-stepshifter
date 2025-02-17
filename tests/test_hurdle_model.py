@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch, call
 from views_stepshifter.models.hurdle_model import HurdleModel
 
 
@@ -9,9 +9,9 @@ from views_stepshifter.models.hurdle_model import HurdleModel
 def sample_config():
     return {
         "steps": [1, 2, 3],
-        "depvar": "target",
-        "model_clf": "RandomForestModel",
-        "model_reg": "LinearRegressionModel",
+        "depvar": ["target"],
+        "model_clf": "RandomForestClassifier",
+        "model_reg": "RandomForestRegressor",
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
         "sweep": False,
         "metrics": ["test_metric"]
@@ -45,8 +45,7 @@ def test_initialization(sample_config, sample_partitioner_dict):
     """
     model = HurdleModel(sample_config, sample_partitioner_dict)
     assert model._steps == sample_config["steps"]
-    assert model._depvar == sample_config["depvar"]
-    assert model._threshold == 1.0
+    assert model._depvar == sample_config["depvar"][0]
     assert model._clf_params == sample_config["parameters"]["clf"]
     assert model._reg_params == sample_config["parameters"]["reg"]
 
@@ -56,13 +55,36 @@ def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
     Test the fit method of the HurdleModel.
     Ensure that the data is processed correctly and the models are fitted.
     """
-    model = HurdleModel(sample_config, sample_partitioner_dict)
-    model._clf = MagicMock()
-    model._reg = MagicMock()
-    model.fit(sample_dataframe)
+    with patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_clf_model") as mock_resolve_clf_model, \
+        patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_reg_model") as mock_resolve_reg_model, \
+        patch("views_stepshifter.models.hurdle_model.RegressionModel") as mock_RegressionModel:
+                
+        model = HurdleModel(sample_config, sample_partitioner_dict)
+        model.fit(sample_dataframe)
+        assert model._clf == mock_resolve_clf_model(model._config["model_clf"])
+        assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
+        assert mock_RegressionModel.call_count == len(model._steps) * 2
+        assert mock_RegressionModel(lags_past_covariates=[-1], model=model._clf).fit.call_count == len(model._steps) * 2
+        
+        target_binary = [
+            s.map(lambda x: (x > 0).astype(float)) for s in model._target_train
+        ]
+        target_pos, past_cov_pos = zip(
+            *[
+                (t, p)
+                for t, p in zip(model._target_train, model._past_cov)
+                if (t.values() > 0).any()
+            ]
+        )
+        for step in model._steps:
+            mock_RegressionModel.assert_has_calls([
+                call(lags_past_covariates=[-step], model=model._clf),
+                call(lags_past_covariates=[-step], model=model._reg),
+            ], any_order=True)
 
-    assert model._clf().fit.called
-    assert model._reg().fit.called
+            mock_RegressionModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
+            mock_RegressionModel(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
+ 
 
 
 def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):

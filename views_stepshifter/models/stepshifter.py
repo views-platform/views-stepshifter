@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 class StepshifterModel:
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
+        self._config = config
         self._steps = config["steps"]
-        self._params = self._get_parameters(config)
+        self._reg_params = self._get_parameters(config)
         self._train_start, self._train_end = partitioner_dict["train"]
         self._test_start, self._test_end = partitioner_dict["test"]
-        self._reg = self._resolve_reg_model(config["model_reg"])
         self._models = {}
 
         # Multiple targets handling
@@ -38,26 +38,26 @@ class StepshifterModel:
             case "XGBRFRegressor":
                 from xgboost import XGBRFRegressor
 
-                return XGBRFRegressor(**self._params)
+                return XGBRFRegressor(**self._reg_params)
             case "XGBRegressor":
                 from xgboost import XGBRegressor
 
-                return XGBRegressor(**self._params)
+                return XGBRegressor(**self._reg_params)
             case "LGBMRegressor":
                 from lightgbm import LGBMRegressor
 
-                return LGBMRegressor(**self._params)
+                return LGBMRegressor(**self._reg_params)
             case "GradientBoostingRegressor":
                 from sklearn.ensemble import GradientBoostingRegressor
 
-                return GradientBoostingRegressor(**self._params)
+                return GradientBoostingRegressor(**self._reg_params)
             case "RandomForestRegressor":
                 from sklearn.ensemble import RandomForestRegressor
 
-                return RandomForestRegressor(**self._params)
+                return RandomForestRegressor(**self._reg_params)
             case _:
                 raise ValueError(
-                    f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
+                    f"Model {func_name} is not a valid forecasting model or is not supported now. "
                     f"Change the model in the config file."
                 )
 
@@ -163,6 +163,7 @@ class StepshifterModel:
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
         self._prepare_time_series(df)
+        self._reg = self._resolve_reg_model(self._config["model_reg"])
         for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
             # model = self._reg(lags_past_covariates=[-step], **self._params)
             model = RegressionModel(lags_past_covariates=[-step], model=self._reg)

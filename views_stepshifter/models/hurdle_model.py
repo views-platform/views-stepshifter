@@ -37,10 +37,6 @@ class HurdleModel(StepshifterModel):
         super().__init__(config, partitioner_dict)
         self._clf_params = self._get_parameters(config)["clf"]
         self._reg_params = self._get_parameters(config)["reg"]
-        self._clf = self._resolve_clf_model(config["model_clf"])
-        self._reg = self._resolve_reg_model(config["model_reg"])
-        # print("reg", self._reg)
-        # print("clf", self._clf)
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""
@@ -72,6 +68,8 @@ class HurdleModel(StepshifterModel):
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
         self._prepare_time_series(df)
+        self._clf = self._resolve_clf_model(self._config["model_clf"])
+        self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         # Binary outcome (event/no-event)
         # According to the DARTS doc, if timeseries uses a numeric type different from np.float32 or np.float64, not all functionalities may work properly.
