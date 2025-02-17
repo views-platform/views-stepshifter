@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import logging
 from darts import TimeSeries
+from darts.models import RegressionModel
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
@@ -13,44 +14,49 @@ logger = logging.getLogger(__name__)
 
 
 class StepshifterModel:
-
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
+        self._config = config
         self._steps = config["steps"]
-        self._depvar = config["depvar"]
-        self._reg = self._resolve_estimator(config["model_reg"])
-        self._params = self._get_parameters(config)
+        self._reg_params = self._get_parameters(config)
         self._train_start, self._train_end = partitioner_dict["train"]
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
-        self._metrics = config["metrics"]
-        
 
-    @staticmethod
-    def _resolve_estimator(func_name: str):
-        """Lookup table for supported estimators.
-        This is necessary because sklearn estimator default arguments
-        must pass equality test, and instantiated sub-estimators are not equal."""
+        # Multiple targets handling
+        if not isinstance(config["depvar"], list):
+            raise ValueError("Dependent variable must be a list")
+        elif len(config["depvar"]) > 1:
+            raise ValueError("Stepshifter only supports one dependent variable")
+        else:
+            self._depvar = config["depvar"][0]
+
+    def _resolve_reg_model(self, func_name: str):
+        """Lookup table for supported regression models"""
 
         match func_name:
-            case "LinearRegressionModel":
-                from darts.models import LinearRegressionModel
+            case "XGBRFRegressor":
+                from xgboost import XGBRFRegressor
 
-                return LinearRegressionModel
-            case "RandomForestModel":
-                from darts.models import RandomForest
+                return XGBRFRegressor(**self._reg_params)
+            case "XGBRegressor":
+                from xgboost import XGBRegressor
 
-                return RandomForest
-            case "LightGBMModel":
-                from darts.models import LightGBMModel
+                return XGBRegressor(**self._reg_params)
+            case "LGBMRegressor":
+                from lightgbm import LGBMRegressor
 
-                return LightGBMModel
-            case "XGBModel":
-                from darts.models import XGBModel
+                return LGBMRegressor(**self._reg_params)
+            case "GradientBoostingRegressor":
+                from sklearn.ensemble import GradientBoostingRegressor
 
-                return XGBModel
+                return GradientBoostingRegressor(**self._reg_params)
+            case "RandomForestRegressor":
+                from sklearn.ensemble import RandomForestRegressor
+
+                return RandomForestRegressor(**self._reg_params)
             case _:
                 raise ValueError(
-                    f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
+                    f"Model {func_name} is not a valid forecasting model or is not supported now. "
                     f"Change the model in the config file."
                 )
 
@@ -147,7 +153,7 @@ class StepshifterModel:
             index=pd.MultiIndex.from_tuples(
                 index_tuples, names=[self._time, self._level]
             ),
-            columns=["step_combined"],
+            columns=[f"pred_{self._depvar}"],
         )
 
         return df_preds.sort_index()
@@ -156,13 +162,13 @@ class StepshifterModel:
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
         self._prepare_time_series(df)
-        for step in tqdm.tqdm(
-            self._steps, desc="Fitting model for step", leave=True
-        ):  # ncols=100
-            model = self._reg(lags_past_covariates=[-step], **self._params)
-            # logger.info(f"Fitting model for step {step}/{self._steps[-1]}")
-            model.fit(self._target_train, 
-                      past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+        self._reg = self._resolve_reg_model(self._config["model_reg"])
+        for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
+            # model = self._reg(lags_past_covariates=[-step], **self._params)
+            model = RegressionModel(lags_past_covariates=[-step], model=self._reg)
+            model.fit(
+                self._target_train, past_covariates=self._past_cov
+            )  # Darts will automatically ignore the parts of past_covariates that go beyond the training period
             self._models[step] = model
         self.is_fitted_ = True
 
