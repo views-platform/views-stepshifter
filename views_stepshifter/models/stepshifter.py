@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 import logging
 from darts import TimeSeries
-from darts.models import RegressionModel
+from darts.models import RegressionModel, XGBModel
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +32,28 @@ class StepshifterModel:
             self._depvar = config["depvar"][0]
 
     def _resolve_reg_model(self, func_name: str):
-        """Lookup table for supported regression models"""
+        """
+        Lookup table for supported regression models
+        views_stepshifter.models.darts_model are custom models that inherit from darts.models
+        """
 
         match func_name:
             case "XGBRFRegressor":
-                from xgboost import XGBRFRegressor
+                from views_stepshifter.models.darts_model import XGBRFModel
 
-                return XGBRFRegressor(**self._reg_params)
+                return XGBRFModel
             case "XGBRegressor":
-                from xgboost import XGBRegressor
+                from darts.models import XGBModel
 
-                return XGBRegressor(**self._reg_params)
+                return XGBModel
             case "LGBMRegressor":
-                from lightgbm import LGBMRegressor
+                from darts.models import LightGBMModel
 
-                return LGBMRegressor(**self._reg_params)
-            case "GradientBoostingRegressor":
-                from sklearn.ensemble import GradientBoostingRegressor
-
-                return GradientBoostingRegressor(**self._reg_params)
+                return LightGBMModel
             case "RandomForestRegressor":
-                from sklearn.ensemble import RandomForestRegressor
+                from darts.models import RandomForest
 
-                return RandomForestRegressor(**self._reg_params)
+                return RandomForest
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid forecasting model or is not supported now. "
@@ -124,11 +123,9 @@ class StepshifterModel:
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
-
-        # logger.info(f"Predicting for step {step} and sequence number {sequence_number}")
-        slice_end = self._train_end + 1 + sequence_number
+        # logger.info(f"Starting prediction for step: {step}")
         target = [
-            series.slice(self._train_start, slice_end)[
+            series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
             ]
             for series in self._series
@@ -141,10 +138,12 @@ class StepshifterModel:
             show_warnings=False,
         )
 
+        # process the predictions
         index_tuples, df_list = [], []
-        test_index = self._test_start + step + sequence_number - 1
         for pred in ts_pred:
-            df_pred = pred.pd_dataframe().loc[[test_index]]
+            df_pred = pred.pd_dataframe().loc[
+                [self._test_start + step + sequence_number - 1]
+            ]
             level = int(pred.static_covariates.iat[0, 0])
             index_tuples.extend([(month, level) for month in df_pred.index])
             df_list.append(df_pred.values)
@@ -159,23 +158,49 @@ class StepshifterModel:
 
         return df_preds.sort_index()
 
+    # @views_validate
+    # def fit(self, df: pd.DataFrame):
+    #     df = self._process_data(df)
+    #     self._prepare_time_series(df)
+    #     self._reg = self._resolve_reg_model(self._config["model_reg"])
+    #     for step in tqdm.tqdm(
+    #         self._steps, desc="Fitting model for step", leave=True
+    #     ):
+    #         model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+    #         model.fit(self._target_train,
+    #                   past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+    #         self._models[step] = model
+    #     self.is_fitted_ = True
+
+    def _fit_by_step(self, step):
+        model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+        model.fit(self._target_train, past_covariates=self._past_cov)
+        return step, model
+
     @views_validate
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
         self._prepare_time_series(df)
         self._reg = self._resolve_reg_model(self._config["model_reg"])
-        for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
-            # model = self._reg(lags_past_covariates=[-step], **self._params)
-            model = RegressionModel(lags_past_covariates=[-step], model=self._reg)
-            model.fit(
-                self._target_train, past_covariates=self._past_cov
-            )  # Darts will automatically ignore the parts of past_covariates that go beyond the training period
-            self._models[step] = model
+
+        models = {}
+        with ProcessPoolExecutor() as executor:
+            futures = {
+                executor.submit(self._fit_by_step, step): step for step in self._steps
+            }
+            for future in tqdm.tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Fitting model for step",
+                leave=True,
+            ):
+                step, model = future.result()
+                models[step] = model
+
+        self._models = models  # Use local variable to avoid concurrent execution issues
         self.is_fitted_ = True
 
-    def predict(
-        self, run_type: str, eval_type: str = "standard"
-    ) -> pd.DataFrame:
+    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
@@ -185,32 +210,54 @@ class StepshifterModel:
                 #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                 #     desc="Predicting for sequence number",
                 # ):
-                #     pred_by_step = [
-                #         self._predict_by_step(self._models[step], step, sequence_number)
-                #         for step in self._steps
-                #     ]
-                #     pred = pd.concat(pred_by_step, axis=0)
-                #     preds.append(pred)
+                # pred_by_step = [
+                #     self._predict_by_step(self._models[step], step, sequence_number)
+                #     for step in self._steps
+                # ]
+                # pred = pd.concat(pred_by_step, axis=0)
+                # preds.append(pred)
 
                 with ProcessPoolExecutor() as executor:
                     for sequence_number in tqdm.tqdm(
-                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        range(
+                            ModelManager._resolve_evaluation_sequence_number(eval_type)
+                        ),
                         desc="Predicting for sequence number",
                     ):
                         futures = [
-                            executor.submit(self._predict_by_step, self._models[step], step, sequence_number)
+                            executor.submit(
+                                self._predict_by_step,
+                                self._models[step],
+                                step,
+                                sequence_number,
+                            )
                             for step in self._steps
                         ]
-                        pred_by_step = [future.result() for future in futures]  
-                        pred = pd.concat(pred_by_step, axis=0)
+                        pred_by_step = [future.result() for future in futures]
+                        pred = pd.concat(pred_by_step, axis=0).sort_index()
                         preds.append(pred)
 
         else:
-            preds = [
-                self._predict_by_step(self._models[step], step, 0)
-                for step in self._steps
-            ]
-            preds = pd.concat(preds, axis=0)
+            # preds = []
+            # for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
+            #     preds.append(self._predict_by_step(self._models[step], step, 0))
+
+            preds = []
+            with ProcessPoolExecutor() as executor:
+                futures = {
+                    executor.submit(
+                        self._predict_by_step, self._models[step], step, 0
+                    ): step
+                    for step in self._steps
+                }
+                for future in tqdm.tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc="Predicting for steps",
+                ):
+                    preds.append(future.result())
+
+            preds = pd.concat(preds, axis=0).sort_index()
         return preds
 
     def save(self, path: str):
