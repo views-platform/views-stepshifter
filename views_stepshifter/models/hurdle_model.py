@@ -76,6 +76,26 @@ class HurdleModel(StepshifterModel):
         positive_model.fit(target_pos, past_covariates=past_cov_pos)
 
         return (binary_model, positive_model)
+    
+    def _predict_by_sequence(self, sequence_number):
+        pred_by_step_binary = []
+        pred_by_step_positive = []
+        
+        for step in self._steps:
+            # Predict for binary model
+            pred_binary = self._predict_by_step(self._models[step][0], step, sequence_number)
+            pred_by_step_binary.append(pred_binary)
+            
+            # Predict for positive model
+            pred_positive = self._predict_by_step(self._models[step][1], step, sequence_number)
+            pred_by_step_positive.append(pred_positive)
+        
+        final_pred = (
+            pd.concat(pred_by_step_binary, axis=0).sort_index() *
+            pd.concat(pred_by_step_positive, axis=0).sort_index()
+        )
+    
+        return final_pred
 
     @views_validate
     def fit(self, df: pd.DataFrame):
@@ -100,34 +120,33 @@ class HurdleModel(StepshifterModel):
             ]
         )
 
-        # models = {}
-        # with ProcessPoolExecutor() as executor:
-        #     futures = {
-        #         executor.submit(self._fit_by_step, step, target_binary, target_pos, past_cov_pos): step
-        #         for step in self._steps
-        #     }
-        #     for future in tqdm.tqdm(as_completed(futures.keys()), desc="Fitting models for steps", total=len(futures)):
-        #         step = futures[future]
-        #         models[step] = future.result()
-        # self._models = models
-        # self.is_fitted_ = True
-
-        for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
-            # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
-            binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
-            binary_model.fit(target_binary, past_covariates=self._past_cov)
-
-            # Fit positive stage using the regression model
-            positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
-            positive_model.fit(target_pos, past_covariates=past_cov_pos)
-            self._models[step] = (binary_model, positive_model)
+        models = {}
+        with ProcessPoolExecutor() as executor:
+            futures = {
+                executor.submit(self._fit_by_step, step, target_binary, target_pos, past_cov_pos): step
+                for step in self._steps
+            }
+            for future in tqdm.tqdm(as_completed(futures.keys()), desc="Fitting models for steps", total=len(futures)):
+                step = futures[future]
+                models[step] = future.result()
+        self._models = models
         self.is_fitted_ = True
+
+        # for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
+        #     # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
+        #     binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
+        #     binary_model.fit(target_binary, past_covariates=self._past_cov)
+
+        #     # Fit positive stage using the regression model
+        #     positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+        #     positive_model.fit(target_pos, past_covariates=past_cov_pos)
+        #     self._models[step] = (binary_model, positive_model)
+        # self.is_fitted_ = True
 
     def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
-            final_preds = []
             if eval_type == "standard":
                 # for sequence_number in tqdm.tqdm(
                 #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
@@ -147,38 +166,23 @@ class HurdleModel(StepshifterModel):
                 #     ]
                 #     final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
                 #     final_preds.append(final_pred)
+
+                total_sequence_number = (
+                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                )
+                preds = [None] * total_sequence_number
                 with ProcessPoolExecutor() as executor:
-                    for sequence_number in tqdm.tqdm(
-                        range(
-                            ModelManager._resolve_evaluation_sequence_number(eval_type)
-                        ),
+                    futures = {
+                        executor.submit(self._predict_by_sequence, sequence_number): sequence_number
+                        for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type))
+                    }
+                    for future in tqdm.tqdm(
+                        as_completed(futures.keys()),
                         desc="Predicting for sequence number",
+                        total=len(futures),
                     ):
-                        futures_binary = {
-                            step: executor.submit(
-                                self._predict_by_step, self._models[step][0], step, sequence_number,
-                            )
-                            for step in self._steps
-                        }
-                        futures_positive = {
-                            step: executor.submit(
-                                self._predict_by_step, self._models[step][1], step, sequence_number,
-                            )
-                            for step in self._steps
-                        }
-
-                        pred_by_step_binary = [
-                            futures_binary[step].result() for step in self._steps
-                        ]
-                        pred_by_step_positive = [
-                            futures_positive[step].result() for step in self._steps
-                        ]
-
-                        final_pred = (
-                            pd.concat(pred_by_step_binary, axis=0).sort_index()
-                            * pd.concat(pred_by_step_positive, axis=0).sort_index()
-                        )
-                        final_preds.append(final_pred)
+                        sequence_number = futures[future]
+                        preds[sequence_number] = future.result()
 
         else:
             # pred_by_step_binary = []
@@ -226,9 +230,9 @@ class HurdleModel(StepshifterModel):
                     )
                 ]
 
-                final_preds = (
+                preds = (
                     pd.concat(pred_by_step_binary, axis=0).sort_index()
                     * pd.concat(pred_by_step_positive, axis=0).sort_index()
                 )
 
-        return final_preds
+        return preds

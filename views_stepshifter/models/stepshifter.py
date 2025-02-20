@@ -163,6 +163,13 @@ class StepshifterModel:
 
         return df_preds.sort_index()
 
+    def _predict_by_sequence(self, sequence_number):
+        pred_by_step = []
+        for step in self._steps:
+            pred = self._predict_by_step(self._models[step], step, sequence_number)
+            pred_by_step.append(pred)
+        return pd.concat(pred_by_step, axis=0).sort_index()
+
     # @views_validate
     # def fit(self, df: pd.DataFrame):
     #     df = self._process_data(df)
@@ -186,10 +193,11 @@ class StepshifterModel:
         models = {}
         with ProcessPoolExecutor() as executor:
             futures = {
-                executor.submit(self._fit_by_step, step): step 
-                for step in self._steps
+                executor.submit(self._fit_by_step, step): step for step in self._steps
             }
-            for future in tqdm.tqdm(futures.keys(), desc="Fitting models for steps", total=len(futures)):
+            for future in tqdm.tqdm(
+                futures.keys(), desc="Fitting models for steps", total=len(futures)
+            ):
                 step = futures[future]
                 models[step] = future.result()
 
@@ -200,8 +208,9 @@ class StepshifterModel:
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
-            preds = []
+
             if eval_type == "standard":
+                # preds = []
                 # for sequence_number in tqdm.tqdm(
                 #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                 #     desc="Predicting for sequence number",
@@ -213,30 +222,31 @@ class StepshifterModel:
                 # pred = pd.concat(pred_by_step, axis=0)
                 # preds.append(pred)
 
+                total_sequence_number = (
+                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                )
+                preds = [None] * total_sequence_number
                 with ProcessPoolExecutor() as executor:
-                    for sequence_number in tqdm.tqdm(
-                        range(
-                            ModelManager._resolve_evaluation_sequence_number(eval_type)
-                        ),
+                    futures = {
+                        executor.submit(
+                            self._predict_by_sequence, sequence_number
+                        ): sequence_number
+                        for sequence_number in range(total_sequence_number)
+                    }
+
+                    for future in tqdm.tqdm(
+                        as_completed(futures.keys()),
                         desc="Predicting for sequence number",
+                        total=len(futures),
                     ):
-                        futures = {
-                            step: executor.submit(
-                                self._predict_by_step,
-                                self._models[step],
-                                step,
-                                sequence_number,
-                            )
-                            for step in self._steps
-                        }
-                        pred_by_step = [futures[step].result() for step in self._steps]
-                        pred = pd.concat(pred_by_step, axis=0).sort_index()
-                        preds.append(pred)
+                        sequence_number = futures[future]
+                        preds[sequence_number] = future.result()
 
         else:
             # preds = []
             # for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
             #     preds.append(self._predict_by_step(self._models[step], step, 0))
+            # preds = pd.concat(preds, axis=0).sort_index()
 
             with ProcessPoolExecutor() as executor:
                 futures = {
@@ -245,7 +255,7 @@ class StepshifterModel:
                     )
                     for step in self._steps
                 }
-                preds = [
+                preds_by_step = [
                     future.result()
                     for future in tqdm.tqdm(
                         as_completed(futures.values()),
@@ -254,7 +264,10 @@ class StepshifterModel:
                     )
                 ]
 
-            preds = pd.concat(preds, axis=0).sort_index()
+            preds = pd.concat(preds_by_step, axis=0).sort_index()
+
+            
+
         return preds
 
     def save(self, path: str):

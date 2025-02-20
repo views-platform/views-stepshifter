@@ -36,7 +36,7 @@ class StepshifterManager(ModelManager):
             The standardized DataFrame
         """
 
-        # post-process: replace negative values with 0
+        # post-process: replace inf and -inf with 0
         df = df.replace([np.inf, -np.inf], 0)
         # df = df.mask(df < 0, 0)
         return df
