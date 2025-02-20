@@ -84,9 +84,7 @@ def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
 
             mock_RegressionModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
             mock_RegressionModel(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
- 
-
-
+    
 def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):
     """
     Test the predict method of the HurdleModel.
@@ -95,7 +93,7 @@ def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):
     model = HurdleModel(sample_config, sample_partitioner_dict)
     model._resolve_estimator = MagicMock(return_value=MagicMock())
     model.fit(sample_dataframe)
-    predictions = model.predict(sample_dataframe, run_type="forecasting")
+    predictions = model.predict(run_type="forecasting")
     assert not predictions.empty
 
 
@@ -125,7 +123,6 @@ def test_save(sample_config, sample_partitioner_dict, tmp_path, sample_dataframe
     Ensure that the model is saved correctly and can be loaded.
     """
     model = HurdleModel(sample_config, sample_partitioner_dict)
-    model._resolve_estimator = MagicMock(return_value=MagicMock())
     model.fit(sample_dataframe)
     save_path = tmp_path / "model.pkl"
     model.save(save_path)

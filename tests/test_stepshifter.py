@@ -159,7 +159,6 @@ def test_fit(config, partitioner_dict):
         assert mock_RegressionModel(lags_past_covariates=[-1], model=model._reg).fit.call_count == len(model._steps) 
         assert model.is_fitted_ == True
 
-    
 
 def test_predict(config, partitioner_dict):
     """
@@ -190,11 +189,11 @@ def test_predict(config, partitioner_dict):
     
         for step in model._steps:
             model._models[step] = MagicMock()
-        model.predict(df, "forecasting")
+        model.predict("forecasting")
         assert mock_predict_by_step.call_count == len(model._steps)
         mock_predict_by_step.reset_mock()
 
-        model.predict(df, "validation")
+        model.predict("validation")
         assert mock_predict_by_step.call_count == len(model._steps) * ModelManager._resolve_evaluation_sequence_number("standard")
 
         assert mock_check_is_fitted.call_count == 2
