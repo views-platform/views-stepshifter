@@ -119,6 +119,11 @@ class StepshifterModel:
             series[self._independent_variables] for series in self._series
         ]
 
+    def _fit_by_step(self, step):
+        model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+        model.fit(self._target_train, past_covariates=self._past_cov)
+        return model
+
     def _predict_by_step(self, model, step: int, sequence_number: int):
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
@@ -172,11 +177,6 @@ class StepshifterModel:
     #         self._models[step] = model
     #     self.is_fitted_ = True
 
-    def _fit_by_step(self, step):
-        model = self._reg(lags_past_covariates=[-step], **self._reg_params)
-        model.fit(self._target_train, past_covariates=self._past_cov)
-        return step, model
-
     @views_validate
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
@@ -186,16 +186,12 @@ class StepshifterModel:
         models = {}
         with ProcessPoolExecutor() as executor:
             futures = {
-                executor.submit(self._fit_by_step, step): step for step in self._steps
+                executor.submit(self._fit_by_step, step): step 
+                for step in self._steps
             }
-            for future in tqdm.tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc="Fitting model for step",
-                leave=True,
-            ):
-                step, model = future.result()
-                models[step] = model
+            for future in tqdm.tqdm(futures.keys(), desc="Fitting models for steps", total=len(futures)):
+                step = futures[future]
+                models[step] = future.result()
 
         self._models = models  # Use local variable to avoid concurrent execution issues
         self.is_fitted_ = True
@@ -224,16 +220,16 @@ class StepshifterModel:
                         ),
                         desc="Predicting for sequence number",
                     ):
-                        futures = [
-                            executor.submit(
+                        futures = {
+                            step: executor.submit(
                                 self._predict_by_step,
                                 self._models[step],
                                 step,
                                 sequence_number,
                             )
                             for step in self._steps
-                        ]
-                        pred_by_step = [future.result() for future in futures]
+                        }
+                        pred_by_step = [futures[step].result() for step in self._steps]
                         pred = pd.concat(pred_by_step, axis=0).sort_index()
                         preds.append(pred)
 
@@ -242,20 +238,21 @@ class StepshifterModel:
             # for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
             #     preds.append(self._predict_by_step(self._models[step], step, 0))
 
-            preds = []
             with ProcessPoolExecutor() as executor:
                 futures = {
-                    executor.submit(
+                    step: executor.submit(
                         self._predict_by_step, self._models[step], step, 0
-                    ): step
+                    )
                     for step in self._steps
                 }
-                for future in tqdm.tqdm(
-                    as_completed(futures),
-                    total=len(futures),
-                    desc="Predicting for steps",
-                ):
-                    preds.append(future.result())
+                preds = [
+                    future.result()
+                    for future in tqdm.tqdm(
+                        as_completed(futures.values()),
+                        desc="Predicting outcomes",
+                        total=len(futures),
+                    )
+                ]
 
             preds = pd.concat(preds, axis=0).sort_index()
         return preds
