@@ -18,7 +18,7 @@ class StepshifterManager(ModelManager):
         self,
         model_path: ModelPathManager,
         wandb_notifications: bool = False,
-        use_prediction_store: bool = False,
+        use_prediction_store: bool = True,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
@@ -38,7 +38,7 @@ class StepshifterManager(ModelManager):
 
         # post-process: replace negative values with 0
         df = df.replace([np.inf, -np.inf], 0)
-        df = df.mask(df < 0, 0)
+        # df = df.mask(df < 0, 0)
         return df
 
     def _split_hurdle_parameters(self):
