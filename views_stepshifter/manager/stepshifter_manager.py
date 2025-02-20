@@ -156,7 +156,6 @@ class StepshifterManager(ModelManager):
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
         
-        
         df_predictions = stepshift_model.predict(run_type, eval_type)
         if not self._is_shurf:
             df_predictions = [
@@ -211,11 +210,7 @@ class StepshifterManager(ModelManager):
         path_raw = self._model_path.data_raw
         run_type = self.config["run_type"]
 
-        df_viewser = read_dataframe(
-            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        )
-
-        df_predictions = model.predict(df_viewser, run_type, eval_type)
+        df_predictions = model.predict(run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]
