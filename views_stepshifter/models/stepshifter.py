@@ -265,8 +265,6 @@ class StepshifterModel:
 
             preds = pd.concat(preds_by_step, axis=0).sort_index()
 
-            
-
         return preds
 
     def save(self, path: str):
