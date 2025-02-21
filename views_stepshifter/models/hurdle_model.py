@@ -2,7 +2,6 @@ from views_pipeline_core.managers.model import ModelManager
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
-from darts.models import RegressionModel
 import pandas as pd
 from typing import List, Dict
 import logging

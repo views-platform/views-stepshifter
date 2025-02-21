@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import logging
 from darts import TimeSeries
-from darts.models import RegressionModel, XGBModel
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
