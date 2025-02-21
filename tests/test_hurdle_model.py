@@ -57,14 +57,19 @@ def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
     """
     with patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_clf_model") as mock_resolve_clf_model, \
         patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_reg_model") as mock_resolve_reg_model, \
-        patch("views_stepshifter.models.hurdle_model.RegressionModel") as mock_RegressionModel:
+        patch("views_stepshifter.models.darts_model.RandomForestClassifierModel") as mock_RandomForestClassifierModel, \
+        patch("darts.models.RandomForest") as mock_RandomForest:
                 
         model = HurdleModel(sample_config, sample_partitioner_dict)
         model.fit(sample_dataframe)
         assert model._clf == mock_resolve_clf_model(model._config["model_clf"])
         assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
-        assert mock_RegressionModel.call_count == len(model._steps) * 2
-        assert mock_RegressionModel(lags_past_covariates=[-1], model=model._clf).fit.call_count == len(model._steps) * 2
+        assert mock_RandomForestClassifierModel.call_count == len(model._steps)
+        assert mock_RandomForest.call_count == len(model._steps)
+        assert mock_RandomForestClassifierModel().fit.call_count == len(model._steps)
+        assert mock_RandomForest().fit.call_count == len(model._steps)
+        # assert mock_RegressionModel.call_count == len(model._steps) * 2
+        # assert mock_RegressionModel(lags_past_covariates=[-1], model=model._clf).fit.call_count == len(model._steps) * 2
         
         target_binary = [
             s.map(lambda x: (x > 0).astype(float)) for s in model._target_train
@@ -77,13 +82,20 @@ def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
             ]
         )
         for step in model._steps:
-            mock_RegressionModel.assert_has_calls([
+            # mock_RegressionModel.assert_has_calls([
+            #     call(lags_past_covariates=[-step], model=model._clf),
+            #     call(lags_past_covariates=[-step], model=model._reg),
+            # ], any_order=True)
+            mock_RandomForestClassifierModel.assert_has_calls([
                 call(lags_past_covariates=[-step], model=model._clf),
+            ], any_order=True)
+            mock_RandomForest.assert_has_calls([
                 call(lags_past_covariates=[-step], model=model._reg),
             ], any_order=True)
-
-            mock_RegressionModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
-            mock_RegressionModel(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
+            # mock_RegressionModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
+            # mock_RegressionModel(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
+            mock_RandomForestClassifierModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
+            mock_RandomForest(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
     
 def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):
     """

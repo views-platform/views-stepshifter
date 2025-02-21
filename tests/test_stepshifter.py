@@ -149,14 +149,17 @@ def test_fit(config, partitioner_dict):
     df = df.astype(np.float64)
 
     with patch("views_stepshifter.models.stepshifter.StepshifterModel._resolve_reg_model") as mock_resolve_reg_model, \
-        patch("views_stepshifter.models.stepshifter.RegressionModel") as mock_RegressionModel:
+        patch("darts.models.RandomForest") as mock_RandomForest:
+
+        mock_instance = mock_RandomForest.return_value
+        mock_instance.fit.return_value = mock_instance  
 
         model = StepshifterModel(config, partitioner_dict)
         model.fit(df)
         
         assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
-        assert mock_RegressionModel.call_count == len(model._steps) 
-        assert mock_RegressionModel(lags_past_covariates=[-1], model=model._reg).fit.call_count == len(model._steps) 
+        assert mock_RandomForest.call_count == len(model._steps) 
+        assert mock_RandomForest(lags_past_covariates=[-1], model=model._reg).fit.call_count == len(model._steps) 
         assert model.is_fitted_ == True
 
 
