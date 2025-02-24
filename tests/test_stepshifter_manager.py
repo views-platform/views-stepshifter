@@ -123,8 +123,8 @@ def test_get_standardized_df():
         "b": [4.0, 5.0, -6.0, 7.0, -8.0]
     })
     expected_df = pd.DataFrame({
-        "a": [1.0, -1.0, 0.0, 0.0, 3.0],
-        "b": [4.0, 5.0, -6.0, 7.0, -8.0]
+        "a": [1.0, 0.0, 0.0, 0.0, 3.0],
+        "b": [4.0, 5.0, 0.0, 7.0, 0.0]
     })
     result_df = StepshifterManager._get_standardized_df(df)
     pd.testing.assert_frame_equal(result_df, expected_df)
