@@ -8,6 +8,7 @@ import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
+# from views_stepshifter.models.shurf import StepShiftedHurdleUncertainRF
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +17,12 @@ class StepshifterManager(ModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
-        wandb_notifications: bool = True,
+        wandb_notifications: bool = False,
         use_prediction_store: bool = True,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
+        self._is_shurf = self._config_meta["algorithm"] == "SHURF"
 
     @staticmethod
     def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -34,7 +36,7 @@ class StepshifterManager(ModelManager):
             The standardized DataFrame
         """
 
-        # post-process: replace negative values with 0
+        # post-process: replace inf and -inf with 0
         df = df.replace([np.inf, -np.inf], 0)
         df = df.mask(df < 0, 0)
         return df
@@ -76,6 +78,8 @@ class StepshifterManager(ModelManager):
         """
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
+        elif self._is_shurf:
+            model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
         else:
             self.config["model_reg"] = self.config["algorithm"]
             model = StepshifterModel(self.config, partitioner_dict)
@@ -144,16 +148,19 @@ class StepshifterManager(ModelManager):
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
         self.config["timestamp"] = path_artifact.stem[-15:]
-        df_viewser = read_dataframe(
-            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        )
 
-        with open(path_artifact, "rb") as f:
-            stepshift_model = pickle.load(f)
-        df_predictions = stepshift_model.predict(df_viewser, run_type, eval_type)
-        df_predictions = [
-            StepshifterManager._get_standardized_df(df) for df in df_predictions
-        ]
+        try:
+            with open(path_artifact, "rb") as f:
+                stepshift_model = pickle.load(f)
+        except FileNotFoundError:
+            logger.exception(f"Model artifact not found at {path_artifact}")
+            raise
+        
+        df_predictions = stepshift_model.predict(run_type, eval_type)
+        if not self._is_shurf:
+            df_predictions = [
+                StepshifterManager._get_standardized_df(df) for df in df_predictions
+            ]
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
@@ -187,9 +194,6 @@ class StepshifterManager(ModelManager):
 
         self.config["timestamp"] = path_artifact.stem[-15:]
 
-        df_viewser = read_dataframe(
-            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        )
         try:
             with open(path_artifact, "rb") as f:
                 stepshift_model = pickle.load(f)
@@ -197,7 +201,7 @@ class StepshifterManager(ModelManager):
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
 
-        df_prediction = stepshift_model.predict(df_viewser, run_type)
+        df_prediction = stepshift_model.predict(run_type)
         df_prediction = StepshifterManager._get_standardized_df(df_prediction)
 
         return df_prediction
@@ -206,11 +210,7 @@ class StepshifterManager(ModelManager):
         path_raw = self._model_path.data_raw
         run_type = self.config["run_type"]
 
-        df_viewser = read_dataframe(
-            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        )
-
-        df_predictions = model.predict(df_viewser, run_type, eval_type)
+        df_predictions = model.predict(run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
         ]

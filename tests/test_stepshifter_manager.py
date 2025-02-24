@@ -205,7 +205,6 @@ def test_evaluate_model_artifact(stepshifter_manager):
     with patch("builtins.open", mock_open(read_data=b"mocked_data")), \
         patch("pickle.load", MagicMock(return_value=mock_model)), \
         patch("views_stepshifter.manager.stepshifter_manager.logger") as mock_logger, \
-        patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
 
         
@@ -219,7 +218,7 @@ def test_evaluate_model_artifact(stepshifter_manager):
         assert stepshifter_manager.config["run_type"] == "test_run_type"
         mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
         assert stepshifter_manager.config["timestamp"] == "202401011200000"
-        mock_read_dataframe.assert_called_once()
+        # mock_read_dataframe.assert_called_once()
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
@@ -245,12 +244,11 @@ def test_forecast_model_artifact(stepshifter_manager):
     with patch("builtins.open", mock_open(read_data=b"mocked_data")) as mock_builtins_open, \
         patch("pickle.load", MagicMock(return_value=mock_model)), \
         patch("views_stepshifter.manager.stepshifter_manager.logger") as mock_logger, \
-        patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
 
         
         # the else branch
-        mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
+        # mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
         stepshifter_manager._model_path.get_latest_model_artifact_path.return_value = Path("predictions_test_run_202401011200000")
         stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
         artifact_name = None
@@ -259,8 +257,8 @@ def test_forecast_model_artifact(stepshifter_manager):
         assert stepshifter_manager.config["run_type"] == "test_run_type"
         mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
         assert stepshifter_manager.config["timestamp"] == "202401011200000"
-        mock_read_dataframe.assert_called_once()
-        mock_model.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type")
+        # mock_read_dataframe.assert_called_once()
+        mock_model.predict.assert_called_once_with("test_run_type")
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
@@ -290,14 +288,14 @@ def test_evaluate_sweep(stepshifter_manager):
     with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
         
-        mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
+        # mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
         stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
         eval_type = "test_eval_type"
         stepshifter_manager._evaluate_sweep(eval_type, mock_model)
 
         assert stepshifter_manager.config["run_type"] == "test_run_type"
-        mock_read_dataframe.assert_called_once()
-        mock_model.predict.assert_called_once_with(mock_read_dataframe.return_value, "test_run_type", eval_type)
+        # mock_read_dataframe.assert_called_once()
+        mock_model.predict.assert_called_once_with("test_run_type", eval_type)
         mock_get_standardized_df.assert_called_once()
 
 
