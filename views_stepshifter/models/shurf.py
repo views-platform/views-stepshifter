@@ -94,6 +94,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
 
         for i in tqdm(range(self._submodels_to_train), desc="Training submodel"):
             # logger.info(f"Training submodel {i+1}/{self._submodels_to_train}")
+            
             for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
                 # logger.info(f"Training step {step}")
                 # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
@@ -104,12 +105,10 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                 positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
                 positive_model.fit(target_pos, past_covariates=past_cov_pos)
                 self._models[step] = (binary_model, positive_model)
-            submodel_dict = {}
-            submodel_dict['model_clf'] = binary_model
-            submodel_dict['model_reg'] = positive_model
-            self._submodel_list.append(submodel_dict)
+            self._submodel_list.append(self._models)
             logger.info(f"Submodel {i+1}/{self._submodels_to_train} trained successfully")
         self.is_fitted_ = True
+    
         
     def predict_sequence(self,run_type, eval_type, sequence_number) -> pd.DataFrame:
         """
@@ -137,70 +136,82 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         """
         
         sample_number = 0
-        final_preds_samples = [] # This will hold predictions for all sub-models and all samples within sub-models
+        final_preds = [] # This will hold predictions for all sub-models and all samples within sub-models
         # Loop over submodels
-        for submodel_number in tqdm(range(self._submodels_to_train), desc=f"Predicting submodel: {run_type}", leave=True):
+        submodel_number = 0
+        for submodel in tqdm(self._submodel_list, desc=f"Predicting submodel: {run_type}", leave=True):
+#            print(submodel)
+            pred_by_step_binary = [self._predict_by_step(submodel[step][0], step, sequence_number) 
+                                for step in self._steps]
+            pred_by_step_positive = [self._predict_by_step(submodel[step][1], step, sequence_number) 
+                                    for step in self._steps]
+            
+#        for submodel_number in tqdm(range(self._submodels_to_train), desc=f"Predicting submodel: {run_type}", leave=True):
 #            print('submodel_number', submodel_number)
             # Predict binary outcomes for each step. Generates a list of dataframes, one df for each step.
-            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
-                                for step in self._steps]
+#            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
+#                                for step in self._steps]
             # Predict positive outcomes for each step. Generates a list of dataframes, one df for each step.
-            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
-                                    for step in self._steps]
+#            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
+#                                    for step in self._steps]
             pred_concat_binary = pd.concat(pred_by_step_binary, axis=0)
-            pred_concat_positive = pd.concat(pred_by_step_positive, axis=0)
-            for subsample_number in range(self._pred_samples):
-#                print('subsample_number', subsample_number)
-                # Draw samples from the classifier; 0/1 according to the classifier's prediction
-                pred_concat_binary_drawn = pred_concat_binary.where(np.random.binomial(n=1,p=pred_concat_binary)==1,0) 
-                if self.log_target:
-                    if self._draw_dist == 'Poisson': # Note: this assumes a non-log-transformed target
-                        pred_concat_positive_drawn = np.log1p(np.random.poisson(np.expm1(pred_concat_positive)))
-#                        print(self._draw_dist,'pred_concat_positive_drawn')
-                    if self._draw_dist == 'Lognormal':
-                            # Application of lognormal distribution for log-transformed outcomes
-                            # Draw from lognormal only for those with predictions larger than zero
-                            pred_concat_positive_drawn = np.where(pred_concat_positive>0, np.random.normal(pred_concat_positive, self._draw_sigma), 0)
-#                            print(self._draw_dist,'pred_concat_positive_drawn')
-#                            print(pred_concat_positive_drawn)
-                    if self._draw_dist == '':
-                        # Use the predicted value without a random draw
-                        pred_concat_positive_drawn = pred_concat_positive
-#                        print('No random draw', 'pred_concat_positive_drawn')
-#                        print(pred_concat_positive_drawn)
-                if not self.log_target:
-                    if self._draw_dist == 'Poisson': # Note: this assumes a non-log-transformed target
-                        pred_concat_positive_drawn = np.random.poisson(pred_concat_positive)
-#                        print(self._draw_dist,'pred_concat_positive_drawn')
-                    if self._draw_dist == 'Lognormal':
-                            # Draw from lognormal only for those with predictions larger than zero
-                            pred_concat_positive_drawn = np.where(pred_concat_positive>0, np.round(np.random.lognormal(np.log1p(pred_concat_positive), self._draw_sigma)-1), 0)
-#                            print(self._draw_dist,'pred_concat_positive_drawn')
-#                            print(pred_concat_positive_drawn)  
-                    if self._draw_dist == '':
-                        # Use the predicted value without a random draw
-                        pred_concat_positive_drawn = pred_concat_positive
-#                        print('No random draw', 'pred_concat_positive_drawn')
-#                        print(pred_concat_positive_drawn)
-                    
-                    # Combine the binary and positive predictions
-                sample_pred = pred_concat_binary_drawn * pred_concat_positive_drawn
-                sample_pred['submodel'] = submodel_number
-                sample_pred['draw'] = sample_number 
-                # Add 'sample_number' to the indices of the sample predictions DataFrame:
-                
-                sample_pred.set_index(['draw'],append=True, inplace=True)
-#                print('sample_pred')
-#                print(sample_pred)
-                # Append the combined predictions to the predictions list for this sequence number
-                final_preds_samples.append(sample_pred)
-                sample_number += 1
             
+            pred_concat_binary.rename(columns={'step_combined':'Classification'}, inplace=True)
+            pred_concat_positive = pd.concat(pred_by_step_positive, axis=0)
+            pred_concat_positive.rename(columns={'step_combined':'Regression'}, inplace=True)
+            pred_concat = pd.concat([pred_concat_binary, pred_concat_positive], axis=1)
+            pred_concat['submodel'] = submodel_number
+#            print(pred_concat.tail(12))
+                
             # Append the combined predictions to the final predictions list
-#                        final_preds.append(intermediate_preds)
+            final_preds.append(pred_concat)
+            submodel_number += 1
 #                    submodel_preds[i] = final_preds
         # Generate a DataFrame from the final predictions list for this sequence number
-        final_preds_full = pd.concat(final_preds_samples, axis=0)  
+        final_preds_aslists = pd.concat(final_preds, axis=0)  
+        # Creating index of samples
+#        first_index = self._pred_samples * submodel_number + 1
+#        last_index = self._pred_samples * submodel_number + self._pred_samples
+#        print('Submodel',submodel_number,'First index',first_index,'Last',last_index)
+#        final_preds_aslists['Draw'] = final_preds_aslists.apply(np.arange(first_index,last_index))
+#        list(range(first_index,last_index))
+        # Drawing samples from the classification model
+        # Ensuring that the classification probabilities are between 0 and 1:
+        final_preds_aslists['Classification'] = final_preds_aslists['Classification'].apply(lambda x: np.clip(x, 0, 1))
+        final_preds_aslists['ClassificationSample'] = final_preds_aslists['Classification'].apply(lambda x: np.random.binomial(1, x, self._pred_samples))
+        
+        # Drawing samples from the regression model
+
+        if self.log_target == True:
+            if self._draw_dist == 'Poisson': # Note: this assumes a non-log-transformed target
+                print('Poisson not implemented')
+                final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression']
+            if self._draw_dist == 'Lognormal':
+                # Draw from normal distribution for log-transformed outcomes, then exponentiate, then round to integer
+                #pred_concat['RegressionSample'] = pred_concat['Regression'].apply(lambda x: np.random.normal(x, self._draw_sigma, self._pred_samples))
+                final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression'].apply(lambda x: np.abs(np.rint(np.expm1(np.random.normal(x, self._draw_sigma, self._pred_samples)))))
+        if self.log_target == False:
+            if self._draw_dist == 'Poisson': # Note: this assumes a non-log-transformed target
+                print('Poisson not implemented')
+                final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression']
+            if self._draw_dist == 'Lognormal':
+                print('Draws for non-log-transformed target: first implementation' )
+                final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression'].apply(lambda x: np.abs(np.rint(np.expm1(np.random.normal(np.log1p(x), self._draw_sigma, self._pred_samples)))))
+            
+        if self._draw_dist == '':
+            final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression']
+        print('final_preds_aslists contains the samples in list form. Shape:', final_preds_aslists.shape)
+        print(final_preds_aslists.tail(20))
+#        final_pred_full = final_preds_aslists.explode(['ClassificationSample','RegressionSample','Draw'])
+        final_preds_full = final_preds_aslists.explode(['ClassificationSample','RegressionSample'])
+        final_preds_full['Prediction'] = final_preds_full['ClassificationSample'] * final_preds_full['RegressionSample']
+        # Ensuring that the final predictions are positive:
+        final_preds_full['Prediction'] = final_preds_full['Prediction'].apply(lambda x: np.clip(x, 0, None))
+        # Log-transforming the final predictions if necessary:
+        final_preds_full['LogPrediction'] = np.log1p(final_preds_full['Prediction'])
+        final_preds_full.drop(columns=['Classification','Regression','ClassificationSample','RegressionSample'],inplace=True)
+#        print('final_preds_full is the end product of the predict sequence function. Shape:', final_preds_full.shape)
+#        print(final_preds_full.tail(20))
         return final_preds_full
 
     @views_validate
@@ -240,13 +251,15 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                 for sequence_number in tqdm(range(ModelManager._resolve_evaluation_sequence_number(eval_type)), desc=f"Sequence", leave=True):
 #                    print('sequence_number', sequence_number)
                     final_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)   
-#                    print('final_preds_full')
-#                    print(final_preds_full.describe())
+#                    print('final_preds_aslists')
+#                    print(final_preds_aslists.describe())
                         
                     # Output the final predictions with samples as parquet  
                     final_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
                     # Aggregate the predictions into point predictions
-                    final_preds = final_preds_full.groupby(['month_id', 'country_id']).mean()
+#                    final_preds.pop('LogPrediction')
+                    final_preds = np.log1p(final_preds_full.groupby(['month_id', 'country_id']).mean())
+#                    final_preds.rename(columns={'Prediction':'pred_ged_sb'}, inplace=True)   
                     final_preds.pop('submodel')
                     preds.append(final_preds) # D: Append the final predictions for this sequence number
                     # Output the final predictions as parquet
@@ -254,15 +267,19 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                 return preds
         else:
             # If the run type is 'forecasting', perform a single prediction
-            submodel_preds = {}
-            for i in tqdm(range(self._submodels_to_train), desc=f"Predicting submodel: {run_type}"):
-                pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, 0)
-                                    for step in self._steps]
-                pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, 0)
-                                        for step in self._steps]
-                # Combine binary and positive predictions by multiplying them
-                final_preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
-                submodel_preds[i] = final_preds
+            final_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)           
+#            print('final_preds_aslists')
+#            print(final_preds_aslists.describe())
+                
+            # Output the final predictions with samples as parquet  
+            final_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
+            # Aggregate the predictions into point predictions
+            final_preds = final_preds_full.groupby(['month_id', 'country_id']).mean()
+            final_preds.pop('submodel')
+            preds.append(final_preds) # D: Append the final predictions for this sequence number
+            # Output the final predictions as parquet
+            final_preds['ged_sb_dep'] = final_preds['Prediction']
+            final_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
 
         # Return the final predictions as a DataFrame
         return final_preds
