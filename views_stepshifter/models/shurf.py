@@ -267,6 +267,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                 return preds
         else:
             # If the run type is 'forecasting', perform a single prediction
+            sequence_number = 0
             final_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)           
 #            print('final_preds_aslists')
 #            print(final_preds_aslists.describe())
@@ -276,10 +277,9 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             # Aggregate the predictions into point predictions
             final_preds = final_preds_full.groupby(['month_id', 'country_id']).mean()
             final_preds.pop('submodel')
-            preds.append(final_preds) # D: Append the final predictions for this sequence number
             # Output the final predictions as parquet
             final_preds['ged_sb_dep'] = final_preds['Prediction']
             final_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
 
-        # Return the final predictions as a DataFrame
-        return final_preds
+            # Return the final predictions as a DataFrame
+            return final_preds
