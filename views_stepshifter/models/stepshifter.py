@@ -127,8 +127,7 @@ class StepshifterModel:
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
-        logger.info(f"Starting prediction for step: {step}")
-        print(f"Starting prediction for step {step}")
+        # logger.info(f"Starting prediction for step: {step}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
@@ -255,22 +254,14 @@ class StepshifterModel:
                     for step in self._steps
                 }
 
-                # preds_by_step = [
-                #     future.result()
-                #     for future in tqdm.tqdm(
-                #         as_completed(futures.values()),
-                #         desc="Predicting outcomes",
-                #         total=len(futures),
-                #     )
-                # ]
-                preds_by_step = []
-                for future in tqdm.tqdm(
-                    as_completed(futures.values()),
-                    desc="Predicting outcomes",
-                    total=len(futures),
-                ):  
-                    print(future.result())
-                    preds_by_step.append(future.result())
+                preds_by_step = [
+                    future.result()
+                    for future in tqdm.tqdm(
+                        as_completed(futures.values()),
+                        desc="Predicting outcomes",
+                        total=len(futures),
+                    )
+                ]
 
             preds = pd.concat(preds_by_step, axis=0).sort_index()
 
