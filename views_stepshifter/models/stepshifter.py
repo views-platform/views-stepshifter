@@ -9,6 +9,8 @@ from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import torch
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,15 @@ class StepshifterModel:
         else:
             self._depvar = config["depvar"][0]
 
+    @staticmethod
+    def get_device_params():
+        if torch.cuda.is_available():
+            return {"device": "cuda"}
+        elif torch.backends.mps.is_available():
+            return {"device": "mps"}
+        else:
+            return {}
+
     def _resolve_reg_model(self, func_name: str):
         """
         Lookup table for supported regression models
@@ -39,15 +50,24 @@ class StepshifterModel:
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda"}
+                    return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
-
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda"}
+                    return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
+                    cuda_params = {"device": "cuda"}
+                    return partial(XGBModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
                 from darts.models import RandomForest
