@@ -7,6 +7,8 @@ from typing import List, Dict
 import logging
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
+multiprocessing.set_start_method('spawn')
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +122,7 @@ class HurdleModel(StepshifterModel):
         )
 
         models = {}
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(self._fit_by_step, step, target_binary, target_pos, past_cov_pos): step
                 for step in self._steps

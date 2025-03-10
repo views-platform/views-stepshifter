@@ -11,6 +11,8 @@ import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
+import multiprocessing
+multiprocessing.set_start_method('spawn')
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +212,7 @@ class StepshifterModel:
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         models = {}
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(self._fit_by_step, step): step for step in self._steps
             }
