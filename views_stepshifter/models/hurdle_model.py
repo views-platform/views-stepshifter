@@ -8,7 +8,7 @@ import logging
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
-multiprocessing.set_start_method('spawn')
+# multiprocessing.set_start_method('spawn')
 
 logger = logging.getLogger(__name__)
 
