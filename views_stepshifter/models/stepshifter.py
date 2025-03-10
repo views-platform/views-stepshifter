@@ -212,7 +212,7 @@ class StepshifterModel:
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         models = {}
-        with ProcessPoolExecutor(max_workers=2) as executor:
+        with ProcessPoolExecutor(max_workers=1 if self.get_device_params().get("device") == "cuda" else None) as executor:
             futures = {
                 executor.submit(self._fit_by_step, step): step for step in self._steps
             }

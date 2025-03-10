@@ -122,7 +122,7 @@ class HurdleModel(StepshifterModel):
         )
 
         models = {}
-        with ProcessPoolExecutor(max_workers=2) as executor:
+        with ProcessPoolExecutor(max_workers=1 if self.get_device_params().get("device") == "cuda" else None) as executor:
             futures = {
                 executor.submit(self._fit_by_step, step, target_binary, target_pos, past_cov_pos): step
                 for step in self._steps
