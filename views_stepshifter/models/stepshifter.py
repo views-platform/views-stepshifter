@@ -11,8 +11,6 @@ import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
-import multiprocessing
-multiprocessing.set_start_method('spawn')
 
 logger = logging.getLogger(__name__)
 
