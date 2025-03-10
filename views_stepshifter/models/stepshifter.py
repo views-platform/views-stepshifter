@@ -128,6 +128,7 @@ class StepshifterModel:
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
         logger.info(f"Starting prediction for step: {step}")
+        print(f"Starting prediction for step {step}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._depvar
