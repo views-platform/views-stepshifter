@@ -212,17 +212,25 @@ class StepshifterModel:
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         models = {}
-        with ProcessPoolExecutor(max_workers=1 if self.get_device_params().get("device") == "cuda" else None) as executor:
-            futures = {
-                executor.submit(self._fit_by_step, step): step for step in self._steps
-            }
-            for future in tqdm.tqdm(
-                futures.keys(), desc="Fitting models for steps", total=len(futures)
+        if self.get_device_params().get("device") == "cuda":
+            for step in tqdm.tqdm(
+                self._steps, desc="Fitting model for step", leave=True
             ):
-                step = futures[future]
-                models[step] = future.result()
-
-        self._models = models  # Use local variable to avoid concurrent execution issues
+                model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                model.fit(self._target_train,
+                            past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+                self._models[step] = model
+        else:
+            with ProcessPoolExecutor() as executor:
+                futures = {
+                    executor.submit(self._fit_by_step, step): step for step in self._steps
+                }
+                for future in tqdm.tqdm(
+                    futures.keys(), desc="Fitting models for steps", total=len(futures)
+                ):
+                    step = futures[future]
+                    models[step] = future.result()
+                self._models = models  # Use local variable to avoid concurrent execution issues
         self.is_fitted_ = True
 
     def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
@@ -246,22 +254,36 @@ class StepshifterModel:
                 total_sequence_number = (
                     ModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
-                preds = [None] * total_sequence_number
-                with ProcessPoolExecutor() as executor:
-                    futures = {
-                        executor.submit(
-                            self._predict_by_sequence, sequence_number
-                        ): sequence_number
-                        for sequence_number in range(total_sequence_number)
-                    }
 
-                    for future in tqdm.tqdm(
-                        as_completed(futures.keys()),
+                if self.get_device_params().get("device") == "cuda":
+                    preds = []
+                    for sequence_number in tqdm.tqdm(
+                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
-                        total=len(futures),
                     ):
-                        sequence_number = futures[future]
-                        preds[sequence_number] = future.result()
+                        pred_by_step = [
+                            self._predict_by_step(self._models[step], step, sequence_number)
+                            for step in self._steps
+                        ]
+                        pred = pd.concat(pred_by_step, axis=0)
+                        preds.append(pred)
+                else:
+                    preds = [None] * total_sequence_number
+                    with ProcessPoolExecutor() as executor:
+                        futures = {
+                            executor.submit(
+                                self._predict_by_sequence, sequence_number
+                            ): sequence_number
+                            for sequence_number in range(total_sequence_number)
+                        }
+
+                        for future in tqdm.tqdm(
+                            as_completed(futures.keys()),
+                            desc="Predicting for sequence number",
+                            total=len(futures),
+                        ):
+                            sequence_number = futures[future]
+                            preds[sequence_number] = future.result()
 
         else:
             # preds = []
@@ -269,23 +291,29 @@ class StepshifterModel:
             #     preds.append(self._predict_by_step(self._models[step], step, 0))
             # preds = pd.concat(preds, axis=0).sort_index()
 
-            with ProcessPoolExecutor() as executor:
-                futures = {
-                    step: executor.submit(
-                        self._predict_by_step, self._models[step], step, 0
-                    )
-                    for step in self._steps
-                }
-                preds_by_step = [
-                    future.result()
-                    for future in tqdm.tqdm(
-                        as_completed(futures.values()),
-                        desc="Predicting outcomes",
-                        total=len(futures),
-                    )
-                ]
+            if self.get_device_params().get("device") == "cuda":
+                preds = []
+                for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
+                    preds.append(self._predict_by_step(self._models[step], step, 0))
+                preds = pd.concat(preds, axis=0).sort_index()
+            else:
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        step: executor.submit(
+                            self._predict_by_step, self._models[step], step, 0
+                        )
+                        for step in self._steps
+                    }
+                    preds_by_step = [
+                        future.result()
+                        for future in tqdm.tqdm(
+                            as_completed(futures.values()),
+                            desc="Predicting outcomes",
+                            total=len(futures),
+                        )
+                    ]
 
-            preds = pd.concat(preds_by_step, axis=0).sort_index()
+                preds = pd.concat(preds_by_step, axis=0).sort_index()
 
         return preds
 
