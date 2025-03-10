@@ -253,14 +253,14 @@ class StepshifterModel:
                     )
                     for step in self._steps
                 }
+                print('futures:', futures)
                 preds_by_step = [
                     future.result()
-                    for future in as_completed(futures.values())
-                    # for future in tqdm.tqdm(
-                    #     as_completed(futures.values()),
-                    #     desc="Predicting outcomes",
-                    #     total=len(futures),
-                    # )
+                    for future in tqdm.tqdm(
+                        as_completed(futures.values()),
+                        desc="Predicting outcomes",
+                        total=len(futures),
+                    )
                 ]
 
             preds = pd.concat(preds_by_step, axis=0).sort_index()
