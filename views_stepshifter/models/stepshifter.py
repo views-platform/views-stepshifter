@@ -52,14 +52,14 @@ class StepshifterModel:
                 from views_stepshifter.models.darts_model import XGBRFModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                    cuda_params = {"device": "cuda"}
+                    cuda_params = {"tree_method": "hist", "device": "cuda"}
                     return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"device": "cuda"}
+                    cuda_params = {"tree_method": "hist", "device": "cuda"}
                     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
