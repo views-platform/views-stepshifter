@@ -188,9 +188,9 @@ class HurdleModel(StepshifterModel):
                         ]
                         final_pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
                         final_preds.append(final_pred)
-
-                    preds = [None] * total_sequence_number
+                    return final_preds
                 else:
+                    preds = [None] * total_sequence_number
                     with ProcessPoolExecutor() as executor:
                         futures = {
                             executor.submit(self._predict_by_sequence, sequence_number): sequence_number
@@ -203,6 +203,7 @@ class HurdleModel(StepshifterModel):
                         ):
                             sequence_number = futures[future]
                             preds[sequence_number] = future.result()
+                    return preds
 
         else:
             if self.get_device_params().get("device") == "cuda":
@@ -219,6 +220,7 @@ class HurdleModel(StepshifterModel):
                 final_preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(
                     pred_by_step_positive, axis=0
                 )
+                return final_preds
             else:
                 with ProcessPoolExecutor() as executor:
                     futures_binary = {
@@ -255,5 +257,4 @@ class HurdleModel(StepshifterModel):
                         pd.concat(pred_by_step_binary, axis=0).sort_index()
                         * pd.concat(pred_by_step_positive, axis=0).sort_index()
                     )
-
-        return preds
+                return preds
