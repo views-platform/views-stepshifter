@@ -147,7 +147,7 @@ class HurdleModel(StepshifterModel):
                     step = futures[future]
                     models[step] = future.result()
             self._models = models
-            self.is_fitted_ = True
+        self.is_fitted_ = True
 
         # for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
         #     # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
