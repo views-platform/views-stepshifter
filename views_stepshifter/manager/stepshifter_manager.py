@@ -78,9 +78,8 @@ class StepshifterManager(ModelManager):
         """
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
-        elif self._is_shurf:
-            # model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
-            raise NotImplementedError("SHURF is not yet implemented")
+        # elif self._is_shurf:
+        #     model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
         else:
             self.config["model_reg"] = self.config["algorithm"]
             model = StepshifterModel(self.config, partitioner_dict)
