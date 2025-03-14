@@ -9,6 +9,8 @@ from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import torch
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,21 @@ class StepshifterModel:
         self._models = {}
 
         # Multiple targets handling
-        if not isinstance(config["depvar"], list):
+        if not isinstance(config["targets"], list):
             raise ValueError("Dependent variable must be a list")
-        elif len(config["depvar"]) > 1:
+        elif len(config["targets"]) > 1:
             raise ValueError("Stepshifter only supports one dependent variable")
         else:
-            self._depvar = config["depvar"][0]
+            self._targets = config["targets"][0]
+
+    @staticmethod
+    def get_device_params():
+        if torch.cuda.is_available():
+            return {"device": "cuda"}
+        elif torch.backends.mps.is_available():
+            return {"device": "mps"}
+        else:
+            return {}
 
     def _resolve_reg_model(self, func_name: str):
         """
@@ -39,15 +50,24 @@ class StepshifterModel:
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
+                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
-
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
+                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
+                #     cuda_params = {"device": "cuda"}
+                #     return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
                 from darts.models import RandomForest
@@ -81,7 +101,7 @@ class StepshifterModel:
         # set up
         self._time = df.index.names[0]
         self._level = df.index.names[1]
-        self._independent_variables = [c for c in df.columns if c != self._depvar]
+        self._independent_variables = [c for c in df.columns if c != self._targets]
 
         last_month_id = df.index.get_level_values(self._time).max()
         existing_country_ids = df.loc[last_month_id].index.unique()
@@ -107,11 +127,11 @@ class StepshifterModel:
         self._series = TimeSeries.from_group_dataframe(
             df_reset,
             group_cols=self._level,
-            value_cols=self._independent_variables + [self._depvar],
+            value_cols=self._independent_variables + [self._targets],
         )
 
         self._target_train = [
-            series.slice(self._train_start, self._train_end + 1)[self._depvar]
+            series.slice(self._train_start, self._train_end + 1)[self._targets]
             for series in self._series
         ]  # ts.slice is different from df.slice
         self._past_cov = [
@@ -130,7 +150,7 @@ class StepshifterModel:
         # logger.info(f"Starting prediction for step: {step}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
-                self._depvar
+                self._targets
             ]
             for series in self._series
         ]
@@ -157,7 +177,7 @@ class StepshifterModel:
             index=pd.MultiIndex.from_tuples(
                 index_tuples, names=[self._time, self._level]
             ),
-            columns=[f"pred_{self._depvar}"],
+            columns=[f"pred_{self._targets}"],
         )
 
         return df_preds.sort_index()
@@ -190,17 +210,25 @@ class StepshifterModel:
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         models = {}
-        with ProcessPoolExecutor() as executor:
-            futures = {
-                executor.submit(self._fit_by_step, step): step for step in self._steps
-            }
-            for future in tqdm.tqdm(
-                futures.keys(), desc="Fitting models for steps", total=len(futures)
+        if self.get_device_params().get("device") == "cuda":
+            for step in tqdm.tqdm(
+                self._steps, desc="Fitting model for step", leave=True
             ):
-                step = futures[future]
-                models[step] = future.result()
-
-        self._models = models  # Use local variable to avoid concurrent execution issues
+                model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                model.fit(self._target_train,
+                            past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+                self._models[step] = model
+        else:
+            with ProcessPoolExecutor() as executor:
+                futures = {
+                    executor.submit(self._fit_by_step, step): step for step in self._steps
+                }
+                for future in tqdm.tqdm(
+                    futures.keys(), desc="Fitting models for steps", total=len(futures)
+                ):
+                    step = futures[future]
+                    models[step] = future.result()
+                self._models = models  # Use local variable to avoid concurrent execution issues
         self.is_fitted_ = True
 
     def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
@@ -224,22 +252,36 @@ class StepshifterModel:
                 total_sequence_number = (
                     ModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
-                preds = [None] * total_sequence_number
-                with ProcessPoolExecutor() as executor:
-                    futures = {
-                        executor.submit(
-                            self._predict_by_sequence, sequence_number
-                        ): sequence_number
-                        for sequence_number in range(total_sequence_number)
-                    }
 
-                    for future in tqdm.tqdm(
-                        as_completed(futures.keys()),
+                if self.get_device_params().get("device") == "cuda":
+                    preds = []
+                    for sequence_number in tqdm.tqdm(
+                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
-                        total=len(futures),
                     ):
-                        sequence_number = futures[future]
-                        preds[sequence_number] = future.result()
+                        pred_by_step = [
+                            self._predict_by_step(self._models[step], step, sequence_number)
+                            for step in self._steps
+                        ]
+                        pred = pd.concat(pred_by_step, axis=0)
+                        preds.append(pred)
+                else:
+                    preds = [None] * total_sequence_number
+                    with ProcessPoolExecutor() as executor:
+                        futures = {
+                            executor.submit(
+                                self._predict_by_sequence, sequence_number
+                            ): sequence_number
+                            for sequence_number in range(total_sequence_number)
+                        }
+
+                        for future in tqdm.tqdm(
+                            as_completed(futures.keys()),
+                            desc="Predicting for sequence number",
+                            total=len(futures),
+                        ):
+                            sequence_number = futures[future]
+                            preds[sequence_number] = future.result()
 
         else:
             # preds = []
@@ -247,23 +289,29 @@ class StepshifterModel:
             #     preds.append(self._predict_by_step(self._models[step], step, 0))
             # preds = pd.concat(preds, axis=0).sort_index()
 
-            with ProcessPoolExecutor() as executor:
-                futures = {
-                    step: executor.submit(
-                        self._predict_by_step, self._models[step], step, 0
-                    )
-                    for step in self._steps
-                }
-                preds_by_step = [
-                    future.result()
-                    for future in tqdm.tqdm(
-                        as_completed(futures.values()),
-                        desc="Predicting outcomes",
-                        total=len(futures),
-                    )
-                ]
+            if self.get_device_params().get("device") == "cuda":
+                preds = []
+                for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
+                    preds.append(self._predict_by_step(self._models[step], step, 0))
+                preds = pd.concat(preds, axis=0).sort_index()
+            else:
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        step: executor.submit(
+                            self._predict_by_step, self._models[step], step, 0
+                        )
+                        for step in self._steps
+                    }
+                    preds_by_step = [
+                        future.result()
+                        for future in tqdm.tqdm(
+                            as_completed(futures.values()),
+                            desc="Predicting outcomes",
+                            total=len(futures),
+                        )
+                    ]
 
-            preds = pd.concat(preds_by_step, axis=0).sort_index()
+                preds = pd.concat(preds_by_step, axis=0).sort_index()
 
         return preds
 
@@ -284,5 +332,5 @@ class StepshifterModel:
         return self._steps
 
     @property
-    def depvar(self):
-        return self._depvar
+    def targets(self):
+        return self._targets
