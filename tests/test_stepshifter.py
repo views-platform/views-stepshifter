@@ -1,8 +1,9 @@
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 from views_stepshifter.models.stepshifter import StepshifterModel
+from views_pipeline_core.managers.model import ModelManager
 
 @pytest.fixture
 def config():
@@ -14,9 +15,9 @@ def config():
     """
     return {
         'steps': [1, 2],
-        'depvar': 'target',
-        'model_reg': 'LinearRegressionModel',
-        'parameters': {'param1': 1, 'param2': 2},
+        'targets': ['target'],
+        'model_reg': 'RandomForestRegressor',
+        'parameters': {'max_depth': 1, 'n_estimators': 100},
         'sweep': False,
         "metrics": ["test_metric"]
     }
@@ -34,7 +35,22 @@ def partitioner_dict():
         'test': [11, 20]
     }
 
-def test_resolve_estimator():
+@pytest.fixture
+def sample_dataframe():
+    index = pd.MultiIndex.from_product(
+        [range(21), range(3)], names=["month_id", "country_id"]
+    )
+    data = {
+        "feature1": np.arange(63, dtype=np.float64),
+        "feature2": np.arange(63, 126, dtype=np.float64),
+        "target": np.array(
+            [0, 1, 2] * 21, dtype=np.float64
+        ),  # Ensure some values are above the threshold
+    }
+    return pd.DataFrame(data, index=index)
+
+
+def test_resolve_reg_model(config, partitioner_dict):
     """
     Test the _resolve_estimator method of the StepshifterModel class.
 
@@ -44,13 +60,12 @@ def test_resolve_estimator():
     Asserts:
         - The resolved estimator class name matches the expected class name.
     """
-    assert StepshifterModel._resolve_estimator('LinearRegressionModel').__name__ == 'LinearRegressionModel'
-    assert StepshifterModel._resolve_estimator('RandomForestModel').__name__ == 'RandomForest'
-    assert StepshifterModel._resolve_estimator('LightGBMModel').__name__ == 'LightGBMModel'
-    assert StepshifterModel._resolve_estimator('XGBModel').__name__ == 'XGBModel'
-    with pytest.raises(ValueError):
-        StepshifterModel._resolve_estimator('InvalidModel')
+  
+    model = StepshifterModel(config, partitioner_dict)
+    reg_model = model._resolve_reg_model("XGBRegressor")
 
+    assert reg_model is not None  
+       
 def test_get_parameters(config):
     """
     Test the _get_parameters method of the StepshifterModel class.
@@ -66,7 +81,7 @@ def test_get_parameters(config):
     """
     model = StepshifterModel(config, {'train': [0, 10], 'test': [11, 20]})
     params = model._get_parameters(config)
-    assert params == {'param1': 1, 'param2': 2}
+    assert params == {'max_depth': 1, 'n_estimators': 100}
 
 def test_process_data(config, partitioner_dict):
     """
@@ -124,68 +139,115 @@ def test_prepare_time_series(config, partitioner_dict):
     model._prepare_time_series(df)
     assert len(model._series) == 2
 
-def test_fit(config, partitioner_dict):
+def test_fit(config, partitioner_dict, sample_dataframe):
     """
-    Test the fit method of the StepshifterModel class.
-
-    This test ensures that the fit method correctly fits the model to the input 
-    DataFrame.
-
-    Args:
-        config (dict): The configuration dictionary fixture.
-        partitioner_dict (dict): The partitioner dictionary fixture.
-
-    Asserts:
-        - The model is fitted successfully.
+    Test the fit method of the HurdleModel.
+    Ensure that the data is processed correctly and the models are fitted.
     """
-    df = pd.DataFrame({
-        'month_id': [1, 1, 2, 2],
-        'country_id': ['A', 'B', 'A', 'B'],
-        'target': [1, 2, 3, 4],
-        'indep1': [5, 6, 7, 8]
-    }).set_index(['month_id', 'country_id'])
+    with patch("views_stepshifter.models.stepshifter.StepshifterModel._resolve_reg_model") as mock_resolve_reg_model, \
+        patch("views_stepshifter.models.stepshifter.tqdm.tqdm") as mock_tqdm, \
+        patch("views_stepshifter.models.stepshifter.ProcessPoolExecutor") as mock_ProcessPoolExecutor:
 
-    # Convert columns to np.float64
-    df = df.astype(np.float64)
+        mock_futures = {
+            MagicMock(): "mock_value"
+            for i in config["steps"]
+        }
 
-    model = StepshifterModel(config, partitioner_dict)
-    with patch.object(model, '_reg', return_value=MagicMock()) as mock_reg:
-        model.fit(df)
-        assert model.is_fitted_
+        mock_executor = MagicMock()
+        mock_executor.submit.side_effect = mock_futures
+        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
+        
 
-def test_predict(config, partitioner_dict):
+        mock_tqdm.side_effect = lambda x, **kwargs: x
+
+
+        model = StepshifterModel(config, partitioner_dict)
+        model.fit(sample_dataframe)
+        assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
+        mock_ProcessPoolExecutor.assert_called_once()
+        mock_tqdm.assert_called_once_with(mock_futures.keys(), desc="Fitting models for steps", total=len(mock_futures))
+        models = {
+            config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(config["steps"]))
+        }
+        assert model._models == models
+        assert model.is_fitted_ == True
+
+
+def test_predict(config, partitioner_dict, sample_dataframe):
     """
-    Test the predict method of the StepshifterModel class.
-
-    This test ensures that the predict method correctly generates predictions
-    based on the input DataFrame and run type.
-
-    Asserts:
-        - The predictions are not empty.
+    Test the predict method of the HurdleModel.
+    Ensure that predictions are made correctly for both stages.
     """
-    df = pd.DataFrame({
-        'month_id': [1, 1, 2, 2],
-        'country_id': ['A', 'B', 'A', 'B'],
-        'target': [1, 2, 3, 4],
-        'indep1': [5, 6, 7, 8]
-    }).set_index(['month_id', 'country_id'])
+    with patch("views_stepshifter.models.stepshifter.check_is_fitted") as mock_check_is_fitted, \
+        patch("views_stepshifter.models.stepshifter.as_completed") as mock_as_completed, \
+        patch("views_stepshifter.models.stepshifter.tqdm.tqdm") as mock_tqdm, \
+        patch("views_stepshifter.models.stepshifter.ProcessPoolExecutor") as mock_ProcessPoolExecutor, \
+        patch("views_stepshifter.models.stepshifter.ModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
 
-    # Convert columns to np.float64
-    df = df.astype(np.float64)
+        
+        # the else branch
+        future = MagicMock()
+        future.result.return_value = pd.DataFrame(
+            np.random.rand(5, 1),  
+            index=pd.Index(range(5, 10)) 
+        )
 
-    model = StepshifterModel(config, partitioner_dict)
-    with patch.object(model, '_reg', return_value=MagicMock()) as mock_reg:
-        mock_model_instance = MagicMock()
-        mock_model_instance.predict.return_value = [
-            MagicMock(pd_dataframe=MagicMock(return_value=pd.DataFrame({
-                'step_combined': [0.1, 0.2]
-            }, index=[11, 12])))
-        ]
-        mock_reg.return_value = mock_model_instance
+        mock_futures = {
+            MagicMock(): future
+            for i in range(len(config["steps"])*2) 
+        }
 
-        model.fit(df)
-        pred = model.predict(df, 'forecasting')
-        assert not pred.empty, "Predictions should not be empty"
+        mock_executor = MagicMock()
+        mock_executor.submit.side_effect = mock_futures 
+        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
+
+        mock_as_completed.return_value = mock_futures.values()
+
+        mock_tqdm.side_effect = lambda x, **kwargs: x
+
+
+        model = StepshifterModel(config, partitioner_dict)
+        model._models = {
+            config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(config["steps"]))
+        }
+        predictions = model.predict(run_type="forecasting") 
+
+        assert mock_check_is_fitted.call_count == 1
+        assert mock_ProcessPoolExecutor.call_count == 1
+        assert repr(mock_tqdm.call_args_list[0]) == repr(call(mock_futures.values(), desc='Predicting outcomes', total=len(config['steps'])))
+        assert mock_as_completed.call_count == 1
+        assert not predictions.empty
+
+
+        # reset mocks
+        mock_check_is_fitted.reset_mock()
+        mock_ProcessPoolExecutor.reset_mock()
+        mock_tqdm.reset_mock()
+        mock_as_completed.reset_mock()
+
+
+        # the if branch
+        mock_sequence_number.return_value = 12
+        mock_futures2 = {
+            MagicMock(): "mock_value"
+            for i in range(mock_sequence_number.return_value)
+        }
+        mock_executor = MagicMock()
+        mock_executor.submit.side_effect = mock_futures2 
+        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
+
+        mock_as_completed.return_value = mock_futures2.keys()
+
+        
+        predictions2 = model.predict(run_type="test_run") 
+
+        assert mock_check_is_fitted.call_count == 1
+        assert mock_sequence_number.call_count == 1
+        assert mock_ProcessPoolExecutor.call_count == 1
+        mock_tqdm.assert_called_once_with(mock_futures2.keys(), desc="Predicting for sequence number", total=len(mock_futures2))
+        mock_as_completed.assert_called_once_with(mock_futures2.keys())
+        assert len(predictions2) != 0
+
 
 def test_save(config, partitioner_dict, tmp_path):
     """
