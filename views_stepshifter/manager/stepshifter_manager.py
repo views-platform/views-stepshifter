@@ -36,9 +36,15 @@ class StepshifterManager(ModelManager):
             The standardized DataFrame
         """
 
-        # post-process: replace inf and -inf with 0
-        df = df.replace([np.inf, -np.inf], 0)
-        df = df.mask(df < 0, 0)
+        def standardize_value(value):
+            # 1) Replace inf and -inf with 0; 
+            # 2) Replace negative values with 0
+            if isinstance(value, list):
+                return [0 if (v == np.inf or v == -np.inf or v < 0) else v for v in value]
+            else:
+                return 0 if (value == np.inf or value == -np.inf or value < 0) else value
+
+        df = df.applymap(standardize_value)
         return df
 
     def _split_hurdle_parameters(self):
@@ -157,10 +163,9 @@ class StepshifterManager(ModelManager):
             raise
         
         df_predictions = stepshift_model.predict(run_type, eval_type)
-        if not self._is_shurf:
-            df_predictions = [
-                StepshifterManager._get_standardized_df(df) for df in df_predictions
-            ]
+        df_predictions = [
+            StepshifterManager._get_standardized_df(df) for df in df_predictions
+        ]
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
