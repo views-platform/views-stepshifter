@@ -146,14 +146,6 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             pred_by_step_positive = [self._predict_by_step(submodel[step][1], step, sequence_number) 
                                     for step in self._steps]
             
-#        for submodel_number in tqdm(range(self._submodels_to_train), desc=f"Predicting submodel: {run_type}", leave=True):
-#            print('submodel_number', submodel_number)
-            # Predict binary outcomes for each step. Generates a list of dataframes, one df for each step.
-#            pred_by_step_binary = [self._predict_by_step(self._models[step][0], step, sequence_number) 
-#                                for step in self._steps]
-            # Predict positive outcomes for each step. Generates a list of dataframes, one df for each step.
-#            pred_by_step_positive = [self._predict_by_step(self._models[step][1], step, sequence_number) 
-#                                    for step in self._steps]
             pred_concat_binary = pd.concat(pred_by_step_binary, axis=0)
             
             pred_concat_binary.rename(columns={'step_combined':'Classification'}, inplace=True)
@@ -169,12 +161,6 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
 #                    submodel_preds[i] = final_preds
         # Generate a DataFrame from the final predictions list for this sequence number
         final_preds_aslists = pd.concat(final_preds, axis=0)  
-        # Creating index of samples
-#        first_index = self._pred_samples * submodel_number + 1
-#        last_index = self._pred_samples * submodel_number + self._pred_samples
-#        print('Submodel',submodel_number,'First index',first_index,'Last',last_index)
-#        final_preds_aslists['Draw'] = final_preds_aslists.apply(np.arange(first_index,last_index))
-#        list(range(first_index,last_index))
         # Drawing samples from the classification model
         # Ensuring that the classification probabilities are between 0 and 1:
         final_preds_aslists['Classification'] = final_preds_aslists['Classification'].apply(lambda x: np.clip(x, 0, 1))
@@ -183,7 +169,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         # Drawing samples from the regression model
 
         if self.log_target == True:
-            if self._draw_dist == 'Poisson': # Note: this assumes a non-log-transformed target
+            if self._draw_dist == 'Poisson': # Note: the Poisson distribution assumes a non-log-transformed target, so not defined here
                 print('Poisson not implemented')
                 final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression']
             if self._draw_dist == 'Lognormal':
@@ -200,19 +186,27 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             
         if self._draw_dist == '':
             final_preds_aslists['RegressionSample'] = final_preds_aslists['Regression']
-        print('final_preds_aslists contains the samples in list form. Shape:', final_preds_aslists.shape)
+        print('final_preds_aslists contains the samples in list form. Shape:', final_preds_aslists.shape, '. Looks like this:')
         print(final_preds_aslists.tail(20))
-#        final_pred_full = final_preds_aslists.explode(['ClassificationSample','RegressionSample','Draw'])
+        # 'Explode' the samples to get one row per sample
         final_preds_full = final_preds_aslists.explode(['ClassificationSample','RegressionSample'])
         final_preds_full['Prediction'] = final_preds_full['ClassificationSample'] * final_preds_full['RegressionSample']
         # Ensuring that the final predictions are positive:
         final_preds_full['Prediction'] = final_preds_full['Prediction'].apply(lambda x: np.clip(x, 0, None))
-        # Log-transforming the final predictions if necessary:
-        final_preds_full['LogPrediction'] = np.log1p(final_preds_full['Prediction'])
-        final_preds_full.drop(columns=['Classification','Regression','ClassificationSample','RegressionSample'],inplace=True)
-#        print('final_preds_full is the end product of the predict sequence function. Shape:', final_preds_full.shape)
-#        print(final_preds_full.tail(20))
-        return final_preds_full
+        # Column for the main prediction:
+        pred_col_name = 'pred_' + self.depvar 
+        final_preds_full[pred_col_name] = final_preds_full['Prediction']
+        # Log-transforming the final predictions if the target is log-transformed, exponentiating if not, and adding a column with the log-transformed predictions
+        if self.log_target == True:
+            final_preds_full['LogPrediction'] = final_preds_full['Prediction']
+            final_preds_full['Prediction'] = np.expm1(final_preds_full['Prediction'])
+        if self.log_target == False:
+            final_preds_full['LogPrediction'] = np.log1p(final_preds_full['Prediction'])
+        final_preds_full.drop(columns=['Classification','Regression','ClassificationSample','RegressionSample','submodel','Prediction','LogPrediction'],inplace=True)
+        final_preds = pd.DataFrame(final_preds_full.groupby(['month_id', 'country_id'])[pred_col_name].apply(list))
+        print('final_preds is the end product of the predict sequence function. Shape:', final_preds_full.shape)
+        print(final_preds.tail(20))
+        return final_preds
 
     @views_validate
     def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
@@ -250,36 +244,40 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
                 # Loop over the evaluation sequence number
                 for sequence_number in tqdm(range(ModelManager._resolve_evaluation_sequence_number(eval_type)), desc=f"Sequence", leave=True):
 #                    print('sequence_number', sequence_number)
-                    final_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)   
-#                    print('final_preds_aslists')
-#                    print(final_preds_aslists.describe())
+                    temp_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)   
                         
-                    # Output the final predictions with samples as parquet  
-                    final_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
+                    # Output the temporary final predictions with samples as parquet  
+                    temp_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
+                    # Convert to views_pipeline standard format
+                    
                     # Aggregate the predictions into point predictions
 #                    final_preds.pop('LogPrediction')
-                    final_preds = np.log1p(final_preds_full.groupby(['month_id', 'country_id']).mean())
+#                    agg_preds = np.log1p(temp_preds_full.groupby(['month_id', 'country_id']).mean())
 #                    final_preds.rename(columns={'Prediction':'pred_ged_sb'}, inplace=True)   
-                    final_preds.pop('submodel')
-                    preds.append(final_preds) # D: Append the final predictions for this sequence number
+#                    agg_preds.pop('submodel')
+                    preds.append(temp_preds_full) # D: Append the final predictions for this sequence number
                     # Output the final predictions as parquet
-                    final_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
+#                    agg_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
                 return preds
         else:
             # If the run type is 'forecasting', perform a single prediction
             sequence_number = 0
-            final_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)           
+            temp_preds_full = self.predict_sequence(run_type, eval_type, sequence_number)         
+            print('temp_preds_full')   
+            
 #            print('final_preds_aslists')
 #            print(final_preds_aslists.describe())
                 
             # Output the final predictions with samples as parquet  
-            final_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
+            temp_preds_full.to_parquet(f'data/generated/final_pred_full_{run_type}_{eval_type}_{sequence_number}.parquet')
             # Aggregate the predictions into point predictions
-            final_preds = final_preds_full.groupby(['month_id', 'country_id']).mean()
-            final_preds.pop('submodel')
+#            agg_preds = temp_preds_full.groupby(['month_id', 'country_id']).mean()
+#            agg_preds.pop('submodel')
             # Output the final predictions as parquet
-            final_preds['ged_sb_dep'] = final_preds['Prediction']
-            final_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
+#            agg_preds['ged_sb_dep'] = agg_preds['Prediction']
+#            agg_preds.to_parquet(f'data/generated/final_preds_{run_type}_{eval_type}_{sequence_number}_agg.parquet')
 
             # Return the final predictions as a DataFrame
-            return final_preds
+            print('Returning final predictions:')
+            print(temp_preds_full.tail(20))
+            return temp_preds_full
