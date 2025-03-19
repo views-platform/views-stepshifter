@@ -110,7 +110,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         self.is_fitted_ = True
     
         
-    def predict_sequence(self,run_type, eval_type, sequence_number) -> pd.DataFrame:
+    def predict_sequence(self, run_type, eval_type, sequence_number) -> pd.DataFrame:
         """
         Predicts n draws of outcomes based on the provided DataFrame .
 
@@ -208,8 +208,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         print(final_preds.tail(20))
         return final_preds
 
-    @views_validate
-    def predict(self, df: pd.DataFrame, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
+    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         """
         Predicts outcomes based on the provided DataFrame and run type.
 
@@ -229,8 +228,6 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
             The final predictions as a DataFrame.
         """
         
-        # Process the input data to ensure it is in the correct format
-        df = self._process_data(df)
         # Check if the model has been fitted before making predictions
         check_is_fitted(self, 'is_fitted_')
         print('Dependent variable:', self.depvar, 'Parameters:', 'Log target:', self.log_target, ' submodels:', self._submodels_to_train, ', samples within submodels: ', self._pred_samples, ', draw distribution: ', self._draw_dist, ', sigma: ', self._draw_sigma)
