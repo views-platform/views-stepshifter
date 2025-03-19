@@ -7,8 +7,6 @@ from typing import List, Dict
 import logging
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
-# import multiprocessing
-# multiprocessing.set_start_method('spawn')
 from functools import partial
 logger = logging.getLogger(__name__)
 
