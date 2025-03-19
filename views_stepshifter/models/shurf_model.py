@@ -194,7 +194,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         # Ensuring that the final predictions are positive:
         final_preds_full['Prediction'] = final_preds_full['Prediction'].apply(lambda x: np.clip(x, 0, None))
         # Column for the main prediction:
-        pred_col_name = 'pred_' + self.depvar 
+        pred_col_name = 'pred_' + self._targets 
         final_preds_full[pred_col_name] = final_preds_full['Prediction']
         # Log-transforming the final predictions if the target is log-transformed, exponentiating if not, and adding a column with the log-transformed predictions
         if self.log_target == True:
@@ -230,7 +230,7 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         
         # Check if the model has been fitted before making predictions
         check_is_fitted(self, 'is_fitted_')
-        print('Dependent variable:', self.depvar, 'Parameters:', 'Log target:', self.log_target, ' submodels:', self._submodels_to_train, ', samples within submodels: ', self._pred_samples, ', draw distribution: ', self._draw_dist, ', sigma: ', self._draw_sigma)
+        print('Dependent variable:', self._targets, 'Parameters:', 'Log target:', self.log_target, ' submodels:', self._submodels_to_train, ', samples within submodels: ', self._pred_samples, ', draw distribution: ', self._draw_dist, ', sigma: ', self._draw_sigma)
 
         # If the run type is not 'forecasting', perform multiple predictions
         if run_type != 'forecasting':
