@@ -42,14 +42,10 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
     rather than limiting the regression to just the predicted positive values.
     """
     
-    def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]], threshold: float = 0.1):
-        super().__init__(config, partitioner_dict, threshold)
-        print(config)
-#        self._clf = RandomForest
-#        self._reg = RandomForest
+    def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
+        super().__init__(config, partitioner_dict)
         self._clf_params = self._get_parameters(config)['clf']
         self._reg_params = self._get_parameters(config)['reg']
-        self._threshold = threshold
 
         self._submodel_list = []
 
@@ -85,12 +81,16 @@ class StepShiftedHurdleUncertainRF(HurdleModel):
         """
         df = self._process_data(df)
         self._prepare_time_series(df)
+        self._clf = self._resolve_clf_model(self._config["model_clf"])
+        self._reg = self._resolve_reg_model(self._config["model_reg"])
 
-        target_binary = [s.map(lambda x: (x > self._threshold).astype(float)) for s in self._target_train]
+        target_binary = [
+            s.map(lambda x: (x > 0).astype(float)) for s in self._target_train
+        ]
 
         # Positive outcome (for cases where target > threshold)
         target_pos, past_cov_pos = zip(*[(t, p) for t, p in zip(self._target_train, self._past_cov)
-                                         if (t.values() > self._threshold).any()])
+                                         if (t.values() > 0).any()])
 
         for i in tqdm(range(self._submodels_to_train), desc="Training submodel"):
             # logger.info(f"Training submodel {i+1}/{self._submodels_to_train}")
