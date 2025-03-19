@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-class StepShiftedHurdleUncertainRF(HurdleModel):
+class ShurfModel(HurdleModel):
     """
     Hurdle model for time series forecasting. The model consists of two stages:
     1. Binary stage: Predicts whether the target variable is 0 or > 0.
