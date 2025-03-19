@@ -8,7 +8,7 @@ import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
-# from views_stepshifter.models.shurf import StepShiftedHurdleUncertainRF
+from views_stepshifter.models.shurf_model import StepShiftedHurdleUncertainRF
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +84,8 @@ class StepshifterManager(ModelManager):
         """
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
-        # elif self._is_shurf:
-        #     model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
+        elif self._is_shurf:
+            model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
         else:
             self.config["model_reg"] = self.config["algorithm"]
             model = StepshifterModel(self.config, partitioner_dict)
