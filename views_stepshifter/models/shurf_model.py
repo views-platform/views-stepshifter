@@ -53,14 +53,14 @@ class ShurfModel(HurdleModel):
         self._submodels_to_train = config['submodels_to_train']
         # self._n_estimators = config['parameters']['n_estimators']
         self.log_target = config['log_target']
-        self._max_features = config['max_features']
-        self._max_depth = config['max_depth']
-        self._max_samples = config['max_samples']
+        # self._max_features = config['max_features']
+        # self._max_depth = config['max_depth']
+        # self._max_samples = config['max_samples']
         self._pred_samples = config['pred_samples']
         self._draw_dist = config['draw_dist']
         self._draw_sigma = config['draw_sigma']
-        self._geo_unit_samples = config['geo_unit_samples']
-        self._n_jobs = config['n_jobs']
+        # self._geo_unit_samples = config['geo_unit_samples']
+        # self._n_jobs = config['n_jobs']
 
     @views_validate
     def fit(self, df: pd.DataFrame):
