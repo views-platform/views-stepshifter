@@ -118,18 +118,30 @@ def test_get_standardized_df():
     """
     Test the _get_standardized_df method to ensure it correctly standardizes the DataFrame.
     """
-    df = pd.DataFrame({
+    df1 = pd.DataFrame({
         "a": [1.0, -1.0, np.inf, -np.inf, 3.0],
         "b": [4.0, 5.0, -6.0, 7.0, -8.0]
     })
-    expected_df = pd.DataFrame({
+    expected_df1 = pd.DataFrame({
         "a": [1.0, 0.0, 0.0, 0.0, 3.0],
         "b": [4.0, 5.0, 0.0, 7.0, 0.0]
     })
-    result_df = StepshifterManager._get_standardized_df(df)
-    pd.testing.assert_frame_equal(result_df, expected_df)
-
-
+    df2 = pd.DataFrame({
+        "a": [[1.0, -1.0, np.inf],
+               [-np.inf, 3.0, 4.0]],
+        "b": [[4.0, 5.0, -6.0],
+              [7.0, -8.0, 9.0]],
+    })
+    expected_df2 = pd.DataFrame({
+        "a": [[1.0, 0.0, 0.0],
+               [0.0, 3.0, 4.0]],
+        "b": [[4.0, 5.0, 0.0],
+              [7.0, 0.0, 9.0]],
+    })
+    result_df1 = StepshifterManager._get_standardized_df(df1)
+    result_df2 = StepshifterManager._get_standardized_df(df2)
+    pd.testing.assert_frame_equal(result_df1, expected_df1)
+    pd.testing.assert_frame_equal(result_df2, expected_df2)
 
 def test_split_hurdle_parameters(stepshifter_manager_hurdle):
     """
@@ -164,9 +176,6 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         stepshifter_manager._get_model(mock_partitioner_dict)
         mock_stepshifter_model.assert_called_once_with(stepshifter_manager.config, mock_partitioner_dict)
         mock_hurdle_model.assert_not_called()
-    
-
-
 
 def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
     """
@@ -193,8 +202,6 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         stepshifter_manager_hurdle._train_model_artifact()
 
         mock_split_hurdle.assert_called_once()
-
-
 
 def test_evaluate_model_artifact(stepshifter_manager):
     """
@@ -232,8 +239,6 @@ def test_evaluate_model_artifact(stepshifter_manager):
         mock_logger.info.assert_called_once_with(f"Using (non-default) artifact: {artifact_name}")
         path_artifact = stepshifter_manager._model_path.artifacts / artifact_name
         assert path_artifact == Path("predictions_test_run_202401011200000/non_default_artifact.pkl")
-
-
 
 def test_forecast_model_artifact(stepshifter_manager):
     """
@@ -278,7 +283,6 @@ def test_forecast_model_artifact(stepshifter_manager):
         assert path_artifact == Path("predictions_test_run_202401011200000/non_default_artifact.pkl")
         mock_logger.exception.assert_called_once_with(f"Model artifact not found at {path_artifact}")
 
-
 def test_evaluate_sweep(stepshifter_manager):
     """
     Test the _evaluate_sweep method.
@@ -297,7 +301,3 @@ def test_evaluate_sweep(stepshifter_manager):
         # mock_read_dataframe.assert_called_once()
         mock_model.predict.assert_called_once_with("test_run_type", eval_type)
         mock_get_standardized_df.assert_called_once()
-
-
-
-
