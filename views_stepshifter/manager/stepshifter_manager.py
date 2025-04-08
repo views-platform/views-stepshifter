@@ -38,19 +38,15 @@ class StepshifterManager(ModelManager):
         """
 
         def standardize_value(value):
-            # 1) Replace inf and -inf with 0; 
+            # 1) Replace inf, -inf, nan with 0; 
             # 2) Replace negative values with 0
-            # if isinstance(value, list):
-            #     return [0 if (v == np.inf or v == -np.inf or v < 0 or v == np.nan) else v for v in value]
-            # else:
-            #     return 0 if (value == np.inf or value == -np.inf or value < 0 or value == np.nan) else value
-            to_exclude = [np.inf, -np.inf, np.nan, None]
-            if isinstance(value, list) or isinstance(value, np.ndarray) or isinstance(value, pd.Series):
-                return [0 if (v in to_exclude) else v for v in value]
+            if isinstance(value, list):
+                return [0 if (v == np.inf or v == -np.inf or v < 0 or np.isnan(v)) else v for v in value]
             else:
-                return 0 if (value in to_exclude) else value
+                return 0 if (value == np.inf or value == -np.inf or value < 0 or np.isnan(value)) else value
 
         df = df.applymap(standardize_value)
+
         return df
 
     def _split_hurdle_parameters(self):
