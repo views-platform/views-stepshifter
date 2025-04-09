@@ -1,6 +1,6 @@
 from views_pipeline_core.managers.model import ModelPathManager, ModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
-from views_pipeline_core.files.utils import read_dataframe
+from views_pipeline_core.files.utils import read_dataframe, generate_model_file_name
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
@@ -9,7 +9,6 @@ import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
-import math
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +116,7 @@ class StepshifterManager(ModelManager):
         stepshift_model.fit(df_viewser)
 
         if not self.config["sweep"]:
-            model_filename = ModelManager.generate_model_file_name(
+            model_filename = generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
@@ -136,7 +135,6 @@ class StepshifterManager(ModelManager):
         Returns:
             A list of DataFrames containing the evaluation results
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -180,7 +178,6 @@ class StepshifterManager(ModelManager):
         Returns:
             The forecasted DataFrame
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -214,7 +211,6 @@ class StepshifterManager(ModelManager):
         return df_prediction
 
     def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
-        path_raw = self._model_path.data_raw
         run_type = self.config["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)
