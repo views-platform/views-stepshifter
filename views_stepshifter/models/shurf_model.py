@@ -1,4 +1,4 @@
-from views_pipeline_core.managers.model import ModelManager
+from views_pipeline_core.managers.model import ForecastingModelManager
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
@@ -271,7 +271,7 @@ class ShurfModel(HurdleModel):
             preds = []
             if eval_type == "standard":
                 for sequence_number in tqdm(
-                    range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                    range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
                     desc=f"Predicting for sequence number",
                     leave=True,
                 ):

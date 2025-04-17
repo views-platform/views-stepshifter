@@ -1,6 +1,6 @@
-from views_pipeline_core.managers.model import ModelPathManager, ModelManager
+from views_pipeline_core.managers.model import ModelPathManager, ForecastingModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
-from views_pipeline_core.files.utils import read_dataframe
+from views_pipeline_core.files.utils import read_dataframe, generate_model_file_name
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
@@ -9,16 +9,15 @@ import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
-import math
 
 logger = logging.getLogger(__name__)
 
 
-class StepshifterManager(ModelManager):
+class StepshifterManager(ForecastingModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
-        wandb_notifications: bool = False,
+        wandb_notifications: bool = True,
         use_prediction_store: bool = True,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
@@ -38,19 +37,15 @@ class StepshifterManager(ModelManager):
         """
 
         def standardize_value(value):
-            # 1) Replace inf and -inf with 0; 
+            # 1) Replace inf, -inf, nan with 0; 
             # 2) Replace negative values with 0
-            # if isinstance(value, list):
-            #     return [0 if (v == np.inf or v == -np.inf or v < 0 or v == np.nan) else v for v in value]
-            # else:
-            #     return 0 if (value == np.inf or value == -np.inf or value < 0 or value == np.nan) else value
-            to_exclude = [np.inf, -np.inf, np.nan, None]
-            if isinstance(value, list) or isinstance(value, np.ndarray) or isinstance(value, pd.Series):
-                return [0 if (v in to_exclude) else v for v in value]
+            if isinstance(value, list):
+                return [0 if (v == np.inf or v == -np.inf or v < 0 or np.isnan(v)) else v for v in value]
             else:
-                return 0 if (value in to_exclude) else value
+                return 0 if (value == np.inf or value == -np.inf or value < 0 or np.isnan(value)) else value
 
         df = df.applymap(standardize_value)
+
         return df
 
     def _split_hurdle_parameters(self):
@@ -121,7 +116,7 @@ class StepshifterManager(ModelManager):
         stepshift_model.fit(df_viewser)
 
         if not self.config["sweep"]:
-            model_filename = ModelManager.generate_model_file_name(
+            model_filename = generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
@@ -140,7 +135,6 @@ class StepshifterManager(ModelManager):
         Returns:
             A list of DataFrames containing the evaluation results
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -184,7 +178,6 @@ class StepshifterManager(ModelManager):
         Returns:
             The forecasted DataFrame
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -218,7 +211,6 @@ class StepshifterManager(ModelManager):
         return df_prediction
 
     def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
-        path_raw = self._model_path.data_raw
         run_type = self.config["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)
