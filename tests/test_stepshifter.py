@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock, call
 from views_stepshifter.models.stepshifter import StepshifterModel
-from views_pipeline_core.managers.model import ModelManager
+from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
 
 @pytest.fixture
 def config():
@@ -182,7 +182,7 @@ def test_predict(config, partitioner_dict, sample_dataframe):
         patch("views_stepshifter.models.stepshifter.as_completed") as mock_as_completed, \
         patch("views_stepshifter.models.stepshifter.tqdm.tqdm") as mock_tqdm, \
         patch("views_stepshifter.models.stepshifter.ProcessPoolExecutor") as mock_ProcessPoolExecutor, \
-        patch("views_stepshifter.models.stepshifter.ModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
+        patch("views_stepshifter.models.stepshifter.ForecastingModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
 
         
         # the else branch
