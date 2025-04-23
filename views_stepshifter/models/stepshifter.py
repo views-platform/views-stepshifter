@@ -6,7 +6,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
-from views_pipeline_core.managers.model import ModelManager
+from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
@@ -238,13 +238,13 @@ class StepshifterModel:
 
             if eval_type == "standard":
                 total_sequence_number = (
-                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
 
                 if self.get_device_params().get("device") == "cuda":
                     preds = []
                     for sequence_number in tqdm.tqdm(
-                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
                     ):
                         pred_by_step = [
