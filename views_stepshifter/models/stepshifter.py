@@ -55,11 +55,20 @@ class StepshifterModel:
             except Exception as e:
                 logger.warning(f"Couldn't update model device: {str(e)}")
 
+    def get_gpu(self):
+        if torch.cuda.is_available():
+            return {"device": "cuda"}
+        elif torch.backends.mps.is_available():
+            return {"device": "mps"}
+        else:
+            logger.warning("CUDA/MPS is not available. Using CPU.")
+            return {"device": "cpu"}
+
     def _get_gpu_params(self, model_name: str):
         """
         Get GPU parameters for the model if available.
         """
-        device_params = self.get_device_params()
+        device_params = self.get_gpu()
         if not device_params:
             return {}
 
@@ -250,7 +259,7 @@ class StepshifterModel:
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
         models = {}
-        if self.get_device_params().get("device") == "cuda":
+        if self.get_gpu().get("device") == "cuda":
             for step in tqdm.tqdm(
                 self._steps, desc="Fitting model for step", leave=True
             ):
@@ -281,7 +290,7 @@ class StepshifterModel:
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
 
-                if self.get_device_params().get("device") == "cuda":
+                if self.get_gpu().get("device") == "cuda":
                     preds = []
                     for sequence_number in tqdm.tqdm(
                         range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
@@ -317,7 +326,7 @@ class StepshifterModel:
 
         else:
 
-            if self.get_device_params().get("device") == "cuda":
+            if self.get_gpu().get("device") == "cuda":
                 preds = []
                 for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
                     preds.append(self._predict_by_step(self._models[step], step, 0))

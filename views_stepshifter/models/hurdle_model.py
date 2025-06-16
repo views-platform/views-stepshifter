@@ -124,7 +124,7 @@ class HurdleModel(StepshifterModel):
             ]
         )
 
-        if self.get_device_params().get("device") == "cuda":
+        if self.get_gpu().get("device") == "cuda":
             for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
                 # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
                 binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
@@ -156,7 +156,7 @@ class HurdleModel(StepshifterModel):
                 total_sequence_number = (
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
-                if self.get_device_params().get("device") == "cuda":
+                if self.get_gpu().get("device") == "cuda":
                     pred = []
                     for sequence_number in tqdm.tqdm(
                         range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
@@ -197,7 +197,7 @@ class HurdleModel(StepshifterModel):
                 )
 
         else:
-            if self.get_device_params().get("device") == "cuda":
+            if self.get_gpu().get("device") == "cuda":
                 pred_by_step_binary = []
                 pred_by_step_positive = []
                 for step in tqdm.tqdm(self._steps, desc="Predicting for step", total=len(self._steps)):
