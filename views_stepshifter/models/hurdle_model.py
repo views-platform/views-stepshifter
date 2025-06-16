@@ -39,7 +39,7 @@ class HurdleModel(StepshifterModel):
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""
-        device_params = self.get_device_params()
+        device_params = self._get_gpu_params()
         use_gpu = "cuda" in device_params.values()
 
         match func_name:
@@ -47,15 +47,13 @@ class HurdleModel(StepshifterModel):
                 from views_stepshifter.models.darts_model import XGBClassifierModel
                 if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
-                    return partial(XGBClassifierModel, **cuda_params)
+                    return partial(XGBClassifierModel, **device_params)
                 return partial(XGBClassifierModel)
             case "XGBRFClassifier":
                 from views_stepshifter.models.darts_model import XGBRFClassifierModel
                 if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBRFClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
-                    return partial(XGBRFClassifierModel, **cuda_params)
+                    return partial(XGBRFClassifierModel, **device_params)
                 return partial(XGBRFClassifierModel)
             case "LGBMClassifier":
                 from views_stepshifter.models.darts_model import LightGBMClassifierModel
