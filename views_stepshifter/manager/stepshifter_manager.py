@@ -203,7 +203,6 @@ class StepshifterManager(ForecastingModelManager):
 
         try:
             stepshift_model = RegressionModel.load(path_artifact)
-            print(stepshift_model.models[0].model.get_params())
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
