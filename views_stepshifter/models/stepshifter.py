@@ -35,7 +35,8 @@ class StepshifterModel:
     @staticmethod
     def get_device_params():
         if torch.cuda.is_available():
-            return {"device": "cuda"}
+            # return {"device": "cuda"}
+            return {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
         elif torch.backends.mps.is_available():
             return {"device": "mps"}
         else:
@@ -68,33 +69,35 @@ class StepshifterModel:
         Lookup table for supported regression models
         views_stepshifter.models.darts_model are custom models that inherit from darts.models
         """
+        device_params = self.get_device_params()
+        use_gpu = "cuda" in device_params.values()
 
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-                if self.get_device_params().get("device") == "cuda":
+                if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
                     return partial(XGBRFModel, **cuda_params)
-                return XGBRFModel
+                return partial(XGBRFModel)
             case "XGBRegressor":
                 from darts.models import XGBModel
-                if self.get_device_params().get("device") == "cuda":
+                if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
                     return partial(XGBModel, **cuda_params)
-                return XGBModel
+                return partial(XGBModel)
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-                # if self.get_device_params().get("device") == "cuda":
+                # if use_gpu:
                 #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
                 #     cuda_params = {"device": "cuda"}
                 #     return partial(LightGBMModel, **cuda_params)
-                return LightGBMModel
+                return partial(LightGBMModel)
             case "RandomForestRegressor":
                 from darts.models import RandomForest
 
-                return RandomForest
+                return partial(RandomForest)
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid forecasting model or is not supported now. "
@@ -171,14 +174,7 @@ class StepshifterModel:
         """
         # logger.info(f"Starting prediction for step: {step}")
         self._update_model_device(model)
-        # Force GPU predictor for XGBoost models
-        if hasattr(model, 'model') and hasattr(model.model, 'set_params'):
-            try:
-                # This enables GPU for prediction
-                model.model.set_params(predictor='gpu_predictor')
-            except:
-                logger.warning("Couldn't set GPU predictor")
-                
+
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._targets

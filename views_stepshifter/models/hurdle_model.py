@@ -39,31 +39,33 @@ class HurdleModel(StepshifterModel):
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""
+        device_params = self.get_device_params()
+        use_gpu = "cuda" in device_params.values()
 
         match func_name:
             case "XGBClassifier":
                 from views_stepshifter.models.darts_model import XGBClassifierModel
-                if self.get_device_params().get("device") == "cuda":
+                if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
                     return partial(XGBClassifierModel, **cuda_params)
-                return XGBClassifierModel
+                return partial(XGBClassifierModel)
             case "XGBRFClassifier":
                 from views_stepshifter.models.darts_model import XGBRFClassifierModel
-                if self.get_device_params().get("device") == "cuda":
+                if use_gpu:
                     logger.info("\033[92mUsing CUDA for XGBRFClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
                     return partial(XGBRFClassifierModel, **cuda_params)
-                return XGBRFClassifierModel
+                return partial(XGBRFClassifierModel)
             case "LGBMClassifier":
                 from views_stepshifter.models.darts_model import LightGBMClassifierModel
-                return LightGBMClassifierModel
+                return partial(LightGBMClassifierModel)
             case "RandomForestClassifier":
                 from views_stepshifter.models.darts_model import (
                     RandomForestClassifierModel,
                 )
 
-                return RandomForestClassifierModel
+                return partial(RandomForestClassifierModel)
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
