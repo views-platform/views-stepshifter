@@ -1,3 +1,5 @@
+from json import load
+from darts.models import RegressionModel
 from views_pipeline_core.managers.model import ModelPathManager, ForecastingModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_pipeline_core.files.utils import read_dataframe, generate_model_file_name
@@ -117,7 +119,7 @@ class StepshifterManager(ForecastingModelManager):
 
         if not self.config["sweep"]:
             model_filename = generate_model_file_name(
-                run_type, file_extension=".pkl"
+                run_type, file_extension=".json"
             )
             stepshift_model.save(path_artifacts / model_filename)
         return stepshift_model
@@ -143,8 +145,8 @@ class StepshifterManager(ForecastingModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(".pkl"):
-                artifact_name += ".pkl"
+            if not artifact_name.endswith(".json"):
+                artifact_name += ".json"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -156,8 +158,9 @@ class StepshifterManager(ForecastingModelManager):
         self.config["timestamp"] = path_artifact.stem[-15:]
 
         try:
-            with open(path_artifact, "rb") as f:
-                stepshift_model = pickle.load(f)
+            # with open(path_artifact, "rb") as f:
+            #     stepshift_model = pickle.load(f)
+            stepshift_model = RegressionModel.load(path_artifact)
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
