@@ -109,7 +109,7 @@ class StepshifterManager(ForecastingModelManager):
         stepshift_model.fit(df_viewser)
 
         if not self.config["sweep"]:
-            model_filename = ModelManager.generate_model_file_name(
+            model_filename = ForecastingModelManager.generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)

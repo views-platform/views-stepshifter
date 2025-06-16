@@ -1,4 +1,4 @@
-from views_pipeline_core.managers.model import ModelManager
+from views_pipeline_core.managers.model import ForecastingModelManager
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.validation import views_validate
 from sklearn.utils.validation import check_is_fitted
@@ -167,11 +167,11 @@ class HurdleModel(StepshifterModel):
             final_preds = []
             if eval_type == "standard":
                 total_sequence_number = (
-                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
                 if self.get_device_params().get("device") == "cuda":
                     for sequence_number in tqdm.tqdm(
-                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
                     ):
                         pred_by_step_binary = [
@@ -194,7 +194,7 @@ class HurdleModel(StepshifterModel):
                     with ProcessPoolExecutor() as executor:
                         futures = {
                             executor.submit(self._predict_by_sequence, sequence_number): sequence_number
-                            for sequence_number in range(ModelManager._resolve_evaluation_sequence_number(eval_type))
+                            for sequence_number in range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type))
                         }
                         for future in tqdm.tqdm(
                             as_completed(futures.keys()),

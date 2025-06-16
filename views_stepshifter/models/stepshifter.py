@@ -6,7 +6,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
-from views_pipeline_core.managers.model import ModelManager
+from views_pipeline_core.managers.model import ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
@@ -175,7 +175,7 @@ class StepshifterModel:
             level = int(pred.static_covariates.iat[0, 0])
             index_tuples.extend([(month, level) for month in df_pred.index])
             df_list.append(df_pred.values)
-            
+
         end_time_process = time.time()
         print(f"Time taken for processing: {end_time_process - end_time} seconds")
 
@@ -257,14 +257,14 @@ class StepshifterModel:
                 # preds.append(pred)
 
                 total_sequence_number = (
-                    ModelManager._resolve_evaluation_sequence_number(eval_type)
+                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
 
                 if self.get_device_params().get("device") == "cuda":
                     print("--------Using CUDA--------")
                     preds = []
                     for sequence_number in tqdm.tqdm(
-                        range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
                     ): 
                         pred_by_step = [
