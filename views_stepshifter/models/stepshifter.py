@@ -53,21 +53,21 @@ class StepshifterModel:
                 from views_stepshifter.models.darts_model import XGBRFModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "hist", "device": "gpu"}
                     return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "hist", "device": "gpu"}
                     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
-                    cuda_params = {"device": "gpu"}
+                    cuda_params = {"device": "cuda", "verbose": -1}
                     return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
@@ -282,13 +282,6 @@ class StepshifterModel:
                 )
 
         else:
-            logger.info(f"---Device: {self.get_device_params().get('device')}---")
-
-            import torch
-            # Force a GPU operation
-            test_tensor = torch.randn(1000, 1000).cuda()
-            logger.info(torch.sum(test_tensor))  # Triggers GPU usage
-
             if self.get_device_params().get("device") == "cuda":
                 preds = []
                 for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
