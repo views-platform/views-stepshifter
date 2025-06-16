@@ -65,10 +65,10 @@ class StepshifterModel:
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
-                #     cuda_params = {"device": "cuda"}
-                #     return partial(LightGBMModel, **cuda_params)
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
+                    cuda_params = {"device": "gpu"}
+                    return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
                 from darts.models import RandomForest
