@@ -6,7 +6,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
-from views_pipeline_core.managers.model import ForecastingModelManager
+from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
@@ -244,18 +244,6 @@ class StepshifterModel:
         if run_type != "forecasting":
 
             if eval_type == "standard":
-                # preds = []
-                # for sequence_number in tqdm.tqdm(
-                #     range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
-                #     desc="Predicting for sequence number",
-                # ):
-                # pred_by_step = [
-                #     self._predict_by_step(self._models[step], step, sequence_number)
-                #     for step in self._steps
-                # ]
-                # pred = pd.concat(pred_by_step, axis=0)
-                # preds.append(pred)
-
                 total_sequence_number = (
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
@@ -290,18 +278,19 @@ class StepshifterModel:
                         ):
                             sequence_number = futures[future]
                             preds[sequence_number] = future.result()
+            else:
+                raise ValueError(
+                    f"{eval_type} is not supported now. Please use 'standard' evaluation type."
+                )
 
         else:
-            # preds = []
-            # for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
-            #     preds.append(self._predict_by_step(self._models[step], step, 0))
-            # preds = pd.concat(preds, axis=0).sort_index()
 
             if self.get_device_params().get("device") == "cuda":
                 preds = []
                 for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
                     preds.append(self._predict_by_step(self._models[step], step, 0))
                 preds = pd.concat(preds, axis=0).sort_index()
+                
             else:
                 with ProcessPoolExecutor() as executor:
                     futures = {
