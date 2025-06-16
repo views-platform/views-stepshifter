@@ -155,6 +155,7 @@ class StepshifterModel:
             ]
             for series in self._series
         ]
+        start_time = time.time()
         ts_pred = model.predict(
             n=step,
             series=target,
@@ -162,6 +163,8 @@ class StepshifterModel:
             past_covariates=self._past_cov,
             show_warnings=False,
         )
+        end_time = time.time()
+        print(f"Time taken for prediction: {end_time - start_time} seconds")
 
         # process the predictions
         index_tuples, df_list = [], []
@@ -172,6 +175,9 @@ class StepshifterModel:
             level = int(pred.static_covariates.iat[0, 0])
             index_tuples.extend([(month, level) for month in df_pred.index])
             df_list.append(df_pred.values)
+            
+        end_time_process = time.time()
+        print(f"Time taken for processing: {end_time_process - end_time} seconds")
 
         df_preds = pd.DataFrame(
             data=np.concatenate(df_list),
@@ -261,16 +267,11 @@ class StepshifterModel:
                         range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
                     ): 
-                        start_time = time.time()
                         pred_by_step = [
                             self._predict_by_step(self._models[step], step, sequence_number)
                             for step in self._steps
                         ]
-                        end_time = time.time()
-                        print(f"Time taken for sequence number {sequence_number}: {end_time - start_time} seconds")
                         pred = pd.concat(pred_by_step, axis=0)
-                        end_time_concat = time.time()
-                        print(f"Time taken for concat: {end_time_concat - end_time} seconds")
                         preds.append(pred)
                 else:
                     preds = [None] * total_sequence_number
