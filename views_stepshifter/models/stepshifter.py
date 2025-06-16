@@ -11,6 +11,7 @@ import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
+from contextlib import nullcontext
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,11 @@ class StepshifterModel:
         else:
             self._targets = config["targets"][0]
         
-    def _update_model_device(self, model):
+    def _update_model_device(self, model, device_config=None):
         """Update model device based on current availability"""
-        device_params = self._get_gpu_params(model_name=model.__class__.__name__)
+        device_config = device_config or self.get_gpu()
+        model_name = model.__class__.__name__
+        device_params = self._get_gpu_params(model_name, device_config)
         logger.info(f"Device params: {device_params}, model name: {model.__class__.__name__}")
         if not device_params:
             return
@@ -63,23 +66,39 @@ class StepshifterModel:
         else:
             logger.warning("CUDA/MPS is not available. Using CPU.")
             return {"device": "cpu"}
+        
+    # Add to StepshifterModel class
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Store device configuration
+        state['_device_config'] = self.get_gpu()
+        return state
 
-    def _get_gpu_params(self, model_name: str):
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Restore device configuration when unpickling
+        device_config = state.get('_device_config', {})
+        if hasattr(self, '_models'):
+            for step, model in self._models.items():
+                # Reapply GPU parameters to each model
+                self._update_model_device(model, device_config)
+
+    def _get_gpu_params(self, model_name: str, device_config=None):
         """
         Get GPU parameters for the model if available.
         """
-        device_params = self.get_gpu()
-        if not device_params:
+        device_config = device_config or self.get_gpu()
+        if not device_config:
             return {}
 
         if model_name in ["XGBRFRegressor", "XGBRegressor", "XGBClassifierModel", "XGBRFClassifierModel", "XGBModel", "XGBRFModel"]:
-            if device_params["device"] == "cuda":
+            if device_config["device"] == "cuda":
                 return {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
             else:
                 logger.warning("CUDA is not available. Using CPU for XGBoost models.")
                 return {"tree_method": "hist", "device": "cpu", "predictor": "cpu_predictor"}
         elif model_name in ["LGBMRegressor", "LightGBMClassifierModel", "LightGBMModel"]:
-            if device_params["device"] == "cuda":
+            if device_config["device"] == "cuda":
                 return {"device": "cuda"}
             else:
                 logger.warning("CUDA is not available. Using CPU for LightGBM models.")
@@ -257,16 +276,20 @@ class StepshifterModel:
         df = self._process_data(df)
         self._prepare_time_series(df)
         self._reg = self._resolve_reg_model(self._config["model_reg"])
+        
+        device = self.get_gpu()["device"]
+        logger.info(f"Using device: {device}")
 
         models = {}
-        if self.get_gpu().get("device") == "cuda":
-            for step in tqdm.tqdm(
-                self._steps, desc="Fitting model for step", leave=True
-            ):
-                model = self._reg(lags_past_covariates=[-step], **self._reg_params)
-                model.fit(self._target_train,
-                            past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
-                self._models[step] = model
+        if device == "cuda":
+            with torch.device(device) if device != "cpu" else nullcontext():
+                for step in tqdm.tqdm(
+                    self._steps, desc="Fitting model for step", leave=True
+                ):
+                    model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                    model.fit(self._target_train,
+                                past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+                    self._models[step] = model
         else:
             with ProcessPoolExecutor() as executor:
                 futures = {
@@ -282,6 +305,8 @@ class StepshifterModel:
 
     def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         check_is_fitted(self, "is_fitted_")
+        device = self.get_gpu()["device"]
+        logger.info(f"Using device: {device}")
 
         if run_type != "forecasting":
 
@@ -290,18 +315,19 @@ class StepshifterModel:
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
 
-                if self.get_gpu().get("device") == "cuda":
-                    preds = []
-                    for sequence_number in tqdm.tqdm(
-                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                        desc="Predicting for sequence number",
-                    ):
-                        pred_by_step = [
-                            self._predict_by_step(self._models[step], step, sequence_number)
-                            for step in self._steps
-                        ]
-                        pred = pd.concat(pred_by_step, axis=0)
-                        preds.append(pred)
+                if device == "cuda":
+                    with torch.device(device) if device != "cpu" else nullcontext():
+                        preds = []
+                        for sequence_number in tqdm.tqdm(
+                            range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
+                            desc="Predicting for sequence number",
+                        ):
+                            pred_by_step = [
+                                self._predict_by_step(self._models[step], step, sequence_number)
+                                for step in self._steps
+                            ]
+                            pred = pd.concat(pred_by_step, axis=0)
+                            preds.append(pred)
                 else:
                     preds = [None] * total_sequence_number
                     with ProcessPoolExecutor() as executor:
@@ -326,11 +352,12 @@ class StepshifterModel:
 
         else:
 
-            if self.get_gpu().get("device") == "cuda":
-                preds = []
-                for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
-                    preds.append(self._predict_by_step(self._models[step], step, 0))
-                preds = pd.concat(preds, axis=0).sort_index()
+            if device == "cuda":
+                with torch.device(device) if device != "cpu" else nullcontext():
+                    preds = []
+                    for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
+                        preds.append(self._predict_by_step(self._models[step], step, 0))
+                    preds = pd.concat(preds, axis=0).sort_index()
                 
             else:
                 with ProcessPoolExecutor() as executor:
