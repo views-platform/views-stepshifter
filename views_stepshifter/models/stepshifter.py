@@ -40,6 +40,28 @@ class StepshifterModel:
             return {"device": "mps"}
         else:
             return {}
+        
+    def _update_model_device(self, model):
+        """Update model device based on current availability"""
+        device_params = self.get_device_params()
+        if not device_params:
+            return
+            
+        # First try setting on underlying model (for custom models)
+        if hasattr(model, 'model') and hasattr(model.model, 'set_params'):
+            try:
+                model.model.set_params(**device_params)
+                logger.info(f"\033[92mUpdated underlying model to use {device_params['device']}\033[0m")
+            except Exception as e:
+                logger.warning(f"Couldn't update underlying model device: {str(e)}")
+        
+        # Then try setting on main model
+        if hasattr(model, 'set_params'):
+            try:
+                model.set_params(**device_params)
+                logger.info(f"\033[92mUpdated model to use {device_params['device']}\033[0m")
+            except Exception as e:
+                logger.warning(f"Couldn't update model device: {str(e)}")
 
     def _resolve_reg_model(self, func_name: str):
         """
@@ -148,6 +170,7 @@ class StepshifterModel:
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
         # logger.info(f"Starting prediction for step: {step}")
+        self._update_model_device(model)
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._targets

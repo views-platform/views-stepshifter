@@ -14,7 +14,7 @@ python = ">=3.11,<3.15"
 views_pipeline_core = ">=1.0.0,<2.0.0"
 pandas = "^1.5.3"
 numpy = "^1.25.2"
-darts = "0.32.0"
+darts = "^0.30.0"
 lightgbm = "4.6.0"
 views_forecasts = "^0.5.5"
 
