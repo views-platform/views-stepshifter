@@ -39,7 +39,7 @@ class HurdleModel(StepshifterModel):
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""
-        device_params = self._get_gpu_params()
+        device_params = self._get_gpu_params(func_name)
         use_gpu = "cuda" in device_params.values()
 
         match func_name:
