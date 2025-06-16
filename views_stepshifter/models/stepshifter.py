@@ -25,12 +25,12 @@ class StepshifterModel:
         self._models = {}
 
         # Multiple targets handling
-        if not isinstance(config["depvar"], list):
+        if not isinstance(config["targets"], list):
             raise ValueError("Dependent variable must be a list")
-        elif len(config["depvar"]) > 1:
+        elif len(config["targets"]) > 1:
             raise ValueError("Stepshifter only supports one dependent variable")
         else:
-            self._depvar = config["depvar"][0]
+            self._targets = config["targets"][0]
 
     @staticmethod
     def get_device_params():
@@ -101,7 +101,7 @@ class StepshifterModel:
         # set up
         self._time = df.index.names[0]
         self._level = df.index.names[1]
-        self._independent_variables = [c for c in df.columns if c != self._depvar]
+        self._independent_variables = [c for c in df.columns if c != self._targets]
 
         last_month_id = df.index.get_level_values(self._time).max()
         existing_country_ids = df.loc[last_month_id].index.unique()
@@ -127,11 +127,11 @@ class StepshifterModel:
         self._series = TimeSeries.from_group_dataframe(
             df_reset,
             group_cols=self._level,
-            value_cols=self._independent_variables + [self._depvar],
+            value_cols=self._independent_variables + [self._targets],
         )
 
         self._target_train = [
-            series.slice(self._train_start, self._train_end + 1)[self._depvar]
+            series.slice(self._train_start, self._train_end + 1)[self._targets]
             for series in self._series
         ]  # ts.slice is different from df.slice
         self._past_cov = [
@@ -150,7 +150,7 @@ class StepshifterModel:
         # logger.info(f"Starting prediction for step: {step}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
-                self._depvar
+                self._targets
             ]
             for series in self._series
         ]
@@ -177,7 +177,7 @@ class StepshifterModel:
             index=pd.MultiIndex.from_tuples(
                 index_tuples, names=[self._time, self._level]
             ),
-            columns=[f"pred_{self._depvar}"],
+            columns=[f"pred_{self._targets}"],
         )
 
         return df_preds.sort_index()
@@ -332,5 +332,5 @@ class StepshifterModel:
         return self._steps
 
     @property
-    def depvar(self):
-        return self._depvar
+    def targets(self):
+        return self._targets

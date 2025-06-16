@@ -19,7 +19,7 @@ def mock_config_meta():
     return {
         "name": "test_model",
         "algorithm": "LightGBMModel",
-        "depvar": "test_depvar",
+        "targets": "test_target",
         "metrics": ["test_metric"]
     }
 
@@ -28,7 +28,7 @@ def mock_config_meta_hurdle():
     return {
         "name": "test_model",
         "algorithm": "HurdleModel",
-        "depvar": "test_depvar",
+        "targets": "test_target",
         "metrics": ["test_metric"],
         "model_clf": "LightGBMModel",
         "model_reg": "LightGBMModel"

@@ -9,7 +9,7 @@ from views_stepshifter.models.hurdle_model import HurdleModel
 def sample_config():
     return {
         "steps": [1, 2, 3],
-        "depvar": ["target"],
+        "targets": ["target"],
         "model_clf": "RandomForestClassifier",
         "model_reg": "RandomForestRegressor",
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
@@ -45,7 +45,7 @@ def test_initialization(sample_config, sample_partitioner_dict):
     """
     model = HurdleModel(sample_config, sample_partitioner_dict)
     assert model._steps == sample_config["steps"]
-    assert model._depvar == sample_config["depvar"][0]
+    assert model._targets == sample_config["targets"][0]
     assert model._clf_params == sample_config["parameters"]["clf"]
     assert model._reg_params == sample_config["parameters"]["reg"]
 
