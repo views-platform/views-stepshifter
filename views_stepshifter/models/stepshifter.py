@@ -163,6 +163,7 @@ class StepshifterModel:
             # darts automatically locates the time period of past_covariates
             past_covariates=self._past_cov,
             show_warnings=False,
+            predictor='gpu_predictor'
         )
         end_time = time.time()
         print(f"Time taken for prediction: {end_time - start_time} seconds")
