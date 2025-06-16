@@ -60,7 +60,7 @@ class StepshifterModel:
                 from darts.models import XGBModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
+                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
                     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
@@ -163,7 +163,6 @@ class StepshifterModel:
             # darts automatically locates the time period of past_covariates
             past_covariates=self._past_cov,
             show_warnings=False,
-            predictor='gpu_predictor'
         )
         end_time = time.time()
         print(f"Time taken for prediction: {end_time - start_time} seconds")
