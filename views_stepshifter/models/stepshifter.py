@@ -72,13 +72,13 @@ class StepshifterModel:
         if not device_params:
             return {}
 
-        if model_name in ["XGBRFRegressor", "XGBRegressor", "XGBClassifier", "XGBRFClassifier", "XGBModel", "XGBRFModel"]:
+        if model_name in ["XGBRFRegressor", "XGBRegressor", "XGBClassifierModel", "XGBRFClassifierModel", "XGBModel", "XGBRFModel"]:
             if device_params["device"] == "cuda":
                 return {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
             else:
                 logger.warning("CUDA is not available. Using CPU for XGBoost models.")
                 return {"tree_method": "hist", "device": "cpu", "predictor": "cpu_predictor"}
-        elif model_name in ["LGBMRegressor", "LGBMClassifier", "LightGBMModel"]:
+        elif model_name in ["LGBMRegressor", "LightGBMClassifierModel", "LightGBMModel"]:
             if device_params["device"] == "cuda":
                 return {"device": "cuda"}
             else:
