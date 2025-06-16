@@ -35,7 +35,7 @@ class StepshifterModel:
     def _update_model_device(self, model):
         """Update model device based on current availability"""
         device_params = self._get_gpu_params(model_name=model.__class__.__name__)
-        logger.info(f"Device params: {device_params}")
+        logger.info(f"Device params: {device_params}, model name: {model.__class__.__name__}")
         if not device_params:
             return
             
@@ -73,13 +73,13 @@ class StepshifterModel:
             return {}
 
         if model_name in ["XGBRFRegressor", "XGBRegressor", "XGBClassifier", "XGBRFClassifier"]:
-            if torch.cuda.is_available():
+            if device_params["device"] == "cuda":
                 return {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
             else:
                 logger.warning("CUDA is not available. Using CPU for XGBoost models.")
                 return {"tree_method": "hist", "device": "cpu", "predictor": "cpu_predictor"}
         elif model_name in ["LGBMRegressor", "LGBMClassifier"]:
-            if torch.cuda.is_available():
+            if device_params["device"] == "cuda":
                 return {"device": "cuda"}
             else:
                 logger.warning("CUDA is not available. Using CPU for LightGBM models.")
