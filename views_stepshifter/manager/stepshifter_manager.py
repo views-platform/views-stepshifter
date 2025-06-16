@@ -1,4 +1,4 @@
-from views_pipeline_core.managers.model import ModelPathManager, ModelManager
+from views_pipeline_core.managers.model import ModelPathManager, ForecastingModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_pipeline_core.files.utils import read_dataframe
 from views_stepshifter.models.stepshifter import StepshifterModel
@@ -13,7 +13,7 @@ from typing import Union, Optional, List, Dict
 logger = logging.getLogger(__name__)
 
 
-class StepshifterManager(ModelManager):
+class StepshifterManager(ForecastingModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
