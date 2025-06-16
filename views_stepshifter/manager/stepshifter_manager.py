@@ -189,8 +189,8 @@ class StepshifterManager(ForecastingModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(".pkl"):
-                artifact_name += ".pkl"
+            if not artifact_name.endswith(".json"):
+                artifact_name += ".json"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -202,8 +202,7 @@ class StepshifterManager(ForecastingModelManager):
         self.config["timestamp"] = path_artifact.stem[-15:]
 
         try:
-            with open(path_artifact, "rb") as f:
-                stepshift_model = pickle.load(f)
+            stepshift_model = RegressionModel.load(path_artifact)
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
