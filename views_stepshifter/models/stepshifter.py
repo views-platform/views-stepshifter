@@ -247,9 +247,8 @@ class StepshifterModel:
                 total_sequence_number = (
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
-
+                print(f"---Device: {self.get_device_params().get('device')}---")
                 if self.get_device_params().get("device") == "cuda":
-                    print("--------Using CUDA--------")
                     preds = []
                     for sequence_number in tqdm.tqdm(
                         range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
