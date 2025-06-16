@@ -315,9 +315,9 @@ class StepshifterModel:
             with open(path, "wb") as file:
                 pickle.dump(self, file)
             
-            for i, model in enumerate(self._models):
+            for i, model in self._models.items():
                 model.model.save_model(f"{path}_{i}.json")
-                
+
             logger.info(f"Model successfully saved to {path}")
         except Exception as e:
             logger.exception(f"Failed to save model: {e}")
