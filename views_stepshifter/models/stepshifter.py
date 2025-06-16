@@ -11,6 +11,7 @@ import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -254,16 +255,22 @@ class StepshifterModel:
                 )
 
                 if self.get_device_params().get("device") == "cuda":
+                    print("--------Using CUDA--------")
                     preds = []
                     for sequence_number in tqdm.tqdm(
                         range(ModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
-                    ):
+                    ): 
+                        start_time = time.time()
                         pred_by_step = [
                             self._predict_by_step(self._models[step], step, sequence_number)
                             for step in self._steps
                         ]
+                        end_time = time.time()
+                        print(f"Time taken for sequence number {sequence_number}: {end_time - start_time} seconds")
                         pred = pd.concat(pred_by_step, axis=0)
+                        end_time_concat = time.time()
+                        print(f"Time taken for concat: {end_time_concat - end_time} seconds")
                         preds.append(pred)
                 else:
                     preds = [None] * total_sequence_number
