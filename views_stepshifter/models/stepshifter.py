@@ -171,6 +171,14 @@ class StepshifterModel:
         """
         # logger.info(f"Starting prediction for step: {step}")
         self._update_model_device(model)
+        # Force GPU predictor for XGBoost models
+        if hasattr(model, 'model') and hasattr(model.model, 'set_params'):
+            try:
+                # This enables GPU for prediction
+                model.model.set_params(predictor='gpu_predictor')
+            except:
+                logger.warning("Couldn't set GPU predictor")
+                
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._targets
