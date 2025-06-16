@@ -119,7 +119,7 @@ class StepshifterManager(ForecastingModelManager):
 
         if not self.config["sweep"]:
             model_filename = generate_model_file_name(
-                run_type, file_extension=".json"
+                run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
         return stepshift_model
@@ -189,8 +189,8 @@ class StepshifterManager(ForecastingModelManager):
         if artifact_name:
             logger.info(f"Using (non-default) artifact: {artifact_name}")
 
-            if not artifact_name.endswith(".json"):
-                artifact_name += ".json"
+            if not artifact_name.endswith(".pkl"):
+                artifact_name += ".pkl"
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
@@ -203,6 +203,8 @@ class StepshifterManager(ForecastingModelManager):
 
         try:
             stepshift_model = RegressionModel.load(path_artifact)
+            for i, model in enumerate(stepshift_model.models):
+                model.model.load_model(f"{path_artifact}_{i}.json")
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise

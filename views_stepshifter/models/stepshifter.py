@@ -60,7 +60,7 @@ class StepshifterModel:
                 from darts.models import XGBModel
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"tree_method": "gpu_hist", "device": "cuda", "predictor": "gpu_predictor"}
+                    cuda_params = {"tree_method": "hist", "device": "cuda"}
                     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
@@ -314,6 +314,10 @@ class StepshifterModel:
         try:
             with open(path, "wb") as file:
                 pickle.dump(self, file)
+            
+            for i, model in enumerate(self._models):
+                model.model.save_model(f"{path}_{i}.json")
+                
             logger.info(f"Model successfully saved to {path}")
         except Exception as e:
             logger.exception(f"Failed to save model: {e}")
