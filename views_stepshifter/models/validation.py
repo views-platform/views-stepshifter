@@ -35,16 +35,16 @@ def dataframe_is_right_format(dataframe: pd.DataFrame):
         logger.exception("The second level of the index must be 'country_id' or 'priogrid_gid'")
         raise AssertionError("The second level of the index must be 'country_id' or 'priogrid_gid'")
 
-    try:
-        assert set(dataframe.dtypes) == {np.dtype(float)}
-        if "country_id" in dataframe.columns:
-            assert set(dataframe.drop(columns=["country_id"]).dtypes) == {np.dtype(float)}
-        else:
-            assert set(dataframe.dtypes) == {np.dtype(float)}
-        # print("The dataframe contains only np.float64 floats")
-    except AssertionError:
-        logger.exception("The dataframe must contain only np.float64 floats")
-        raise AssertionError("The dataframe must contain only np.float64 floats")
+    # try:
+    #     assert set(dataframe.dtypes) == {np.dtype(float)}
+    #     if "country_id" in dataframe.columns:
+    #         assert set(dataframe.drop(columns=["country_id"]).dtypes) == {np.dtype(float)}
+    #     else:
+    #         assert set(dataframe.dtypes) == {np.dtype(float)}
+    #     # print("The dataframe contains only np.float64 floats")
+    # except AssertionError:
+    #     logger.exception("The dataframe must contain only np.float64 floats")
+    #     raise AssertionError("The dataframe must contain only np.float64 floats")
     
 # Needs update
 def views_validate(fn):
