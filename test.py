@@ -1,15 +1,18 @@
-# Create a simple test to isolate the issue
 import xgboost as xgb
 import numpy as np
 
-# Small test dataset
-X_small = np.random.randn(1000, 10).astype(np.float32)
-y_small = np.random.randn(1000).astype(np.float32)
+# Create sample data
+X_train = np.random.randn(1000, 10).astype(np.float32)
+y_train = np.random.randn(1000).astype(np.float32)
+X_test = np.random.randn(200, 10).astype(np.float32)
 
-# Fresh model
-test_model = xgb.XGBRegressor(device='cuda', n_estimators=10)
-test_model.fit(X_small, y_small)
+# Train model on GPU
+model = xgb.XGBRegressor(device='cuda', n_estimators=50)
+model.fit(X_train, y_train)
 
-print("Testing fresh model prediction...")
-# Monitor nvidia-smi during this
-predictions = test_model.predict(X_small)
+# Simple fix - use DMatrix
+print("Testing GPU prediction...")
+dtest = xgb.DMatrix(X_test)
+predictions = model.predict(dtest)
+
+print("Done. Check nvidia-smi to see if GPU was used.")
