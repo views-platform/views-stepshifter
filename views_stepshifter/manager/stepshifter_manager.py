@@ -19,7 +19,7 @@ class StepshifterManager(ForecastingModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
-        wandb_notifications: bool = True,
+        wandb_notifications: bool = False,
         use_prediction_store: bool = True,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
@@ -203,8 +203,9 @@ class StepshifterManager(ForecastingModelManager):
 
         try:
             stepshift_model = RegressionModel.load(path_artifact)
+            print(stepshift_model.models)
             for i, model in enumerate(stepshift_model.models):
-                model.model.load_model(f"{path_artifact}_{i}.json")
+                model.model.load_model(f"{path_artifact.parent}/sub_artifacts/{path_artifact.stem}_{i+1}.json")
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise

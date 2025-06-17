@@ -1,4 +1,5 @@
 import pickle
+from matplotlib.pylab import f
 import numpy as np
 import pandas as pd
 import logging
@@ -12,6 +13,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
 import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +317,9 @@ class StepshifterModel:
             with open(path, "wb") as file:
                 pickle.dump(self, file)
             
+            Path.mkdir(f"{path.parent}/sub_artifacts", exist_ok=True)
             for i, model in self._models.items():
-                model.model.save_model(f"{path}_{i}.json")
+                model.model.save_model(f"{path.parent}/sub_artifacts/{path.stem}_{i}.json")
 
             logger.info(f"Model successfully saved to {path}")
         except Exception as e:
