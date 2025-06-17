@@ -12,7 +12,6 @@ model.fit(X_train, y_train)
 
 # Simple fix - use DMatrix
 print("Testing GPU prediction...")
-dtest = xgb.DMatrix(X_test)
-predictions = model.predict(dtest)
+predictions = model.predict(X_test)
 
 print("Done. Check nvidia-smi to see if GPU was used.")
