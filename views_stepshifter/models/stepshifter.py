@@ -151,7 +151,6 @@ class StepshifterModel:
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
         # logger.info(f"Starting prediction for step: {step}")
-        print(model.model.get_params())
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._targets
@@ -317,7 +316,7 @@ class StepshifterModel:
             with open(path, "wb") as file:
                 pickle.dump(self, file)
             
-            Path.mkdir(f"{path.parent}/sub_artifacts", exist_ok=True)
+            Path(path.parent / "sub_artifacts").mkdir(exist_ok=True)
             for i, model in self._models.items():
                 model.model.save_model(f"{path.parent}/sub_artifacts/{path.stem}_{i}.json")
 
