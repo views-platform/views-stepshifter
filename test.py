@@ -4,6 +4,7 @@ from darts.models import XGBModel
 model = XGBModel(
     tree_method='gpu_hist',  # GPU training
     gpu_id=0,  # Which GPU to use
+    lags=1
     # XGBoost automatically uses GPU for prediction when available
     # No separate predictor parameter needed
 )
