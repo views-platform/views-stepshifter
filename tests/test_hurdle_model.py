@@ -125,7 +125,7 @@ def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):
         patch("views_stepshifter.models.hurdle_model.as_completed") as mock_as_completed, \
         patch("views_stepshifter.models.hurdle_model.tqdm.tqdm") as mock_tqdm, \
         patch("views_stepshifter.models.hurdle_model.ProcessPoolExecutor") as mock_ProcessPoolExecutor, \
-        patch("views_stepshifter.models.hurdle_model.ModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
+        patch("views_stepshifter.models.hurdle_model.ForecastingModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
 
         
         # the else branch
