@@ -1,28 +1,28 @@
-from views_pipeline_core.managers.model import ModelPathManager, ModelManager
+from views_pipeline_core.managers.model import ModelPathManager, ForecastingModelManager
 from views_pipeline_core.configs.pipeline import PipelineConfig
-from views_pipeline_core.files.utils import read_dataframe
+from views_pipeline_core.files.utils import read_dataframe, generate_model_file_name
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
+from views_stepshifter.models.shurf_model import ShurfModel
 import logging
 import pickle
 import pandas as pd
 import numpy as np
 from typing import Union, Optional, List, Dict
-# from views_stepshifter.models.shurf import StepShiftedHurdleUncertainRF
 
 logger = logging.getLogger(__name__)
 
 
-class StepshifterManager(ModelManager):
+class StepshifterManager(ForecastingModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
-        wandb_notifications: bool = False,
+        wandb_notifications: bool = True,
         use_prediction_store: bool = True,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
-        self._is_shurf = self._config_meta["algorithm"] == "SHURF"
+        self._is_shurf = self._config_meta["algorithm"] == "ShurfModel"
 
     @staticmethod
     def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -36,9 +36,16 @@ class StepshifterManager(ModelManager):
             The standardized DataFrame
         """
 
-        # post-process: replace inf and -inf with 0
-        df = df.replace([np.inf, -np.inf], 0)
-        df = df.mask(df < 0, 0)
+        def standardize_value(value):
+            # 1) Replace inf, -inf, nan with 0; 
+            # 2) Replace negative values with 0
+            if isinstance(value, list):
+                return [0 if (v == np.inf or v == -np.inf or v < 0 or np.isnan(v)) else v for v in value]
+            else:
+                return 0 if (value == np.inf or value == -np.inf or value < 0 or np.isnan(value)) else value
+
+        df = df.applymap(standardize_value)
+
         return df
 
     def _split_hurdle_parameters(self):
@@ -78,8 +85,8 @@ class StepshifterManager(ModelManager):
         """
         if self._is_hurdle:
             model = HurdleModel(self.config, partitioner_dict)
-        # elif self._is_shurf:
-        #     model = StepShiftedHurdleUncertainRF(self.config, partitioner_dict)
+        elif self._is_shurf:
+            model = ShurfModel(self.config, partitioner_dict)
         else:
             self.config["model_reg"] = self.config["algorithm"]
             model = StepshifterModel(self.config, partitioner_dict)
@@ -96,7 +103,7 @@ class StepshifterManager(ModelManager):
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         # W&B does not directly support nested dictionaries for hyperparameters
-        if self.config["sweep"] and self._is_hurdle:
+        if self.config["sweep"] and (self._is_hurdle or self._is_shurf):
             self.config = self._split_hurdle_parameters()
 
         run_type = self.config["run_type"]
@@ -109,7 +116,7 @@ class StepshifterManager(ModelManager):
         stepshift_model.fit(df_viewser)
 
         if not self.config["sweep"]:
-            model_filename = ModelManager.generate_model_file_name(
+            model_filename = generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
             stepshift_model.save(path_artifacts / model_filename)
@@ -128,7 +135,6 @@ class StepshifterManager(ModelManager):
         Returns:
             A list of DataFrames containing the evaluation results
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -157,10 +163,9 @@ class StepshifterManager(ModelManager):
             raise
         
         df_predictions = stepshift_model.predict(run_type, eval_type)
-        if not self._is_shurf:
-            df_predictions = [
-                StepshifterManager._get_standardized_df(df) for df in df_predictions
-            ]
+        df_predictions = [
+            StepshifterManager._get_standardized_df(df) for df in df_predictions
+        ]
         return df_predictions
 
     def _forecast_model_artifact(self, artifact_name: str) -> pd.DataFrame:
@@ -173,7 +178,6 @@ class StepshifterManager(ModelManager):
         Returns:
             The forecasted DataFrame
         """
-        path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         run_type = self.config["run_type"]
 
@@ -207,7 +211,6 @@ class StepshifterManager(ModelManager):
         return df_prediction
 
     def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
-        path_raw = self._model_path.data_raw
         run_type = self.config["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)
