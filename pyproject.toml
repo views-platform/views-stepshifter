@@ -18,7 +18,7 @@ numpy = "^1.25.2"
 darts = "^0.30.0"
 lightgbm = "4.6.0"
 views_forecasts = "^0.5.5"
-scipy = "1.15.1"
+scipy = "1.15.1" # error with latest scipy 1.16.0. see https://github.com/statsmodels/statsmodels/issues?q=_lazywhere
 
 
 
