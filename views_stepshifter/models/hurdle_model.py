@@ -157,7 +157,7 @@ class HurdleModel(StepshifterModel):
                     ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
                 )
                 if self.get_device_params().get("device") == "cuda":
-                    pred = []
+                    preds = []
                     for sequence_number in tqdm.tqdm(
                         range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
                         desc="Predicting for sequence number",
