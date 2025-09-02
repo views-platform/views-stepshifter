@@ -17,8 +17,8 @@ class StepshifterManager(ForecastingModelManager):
     def __init__(
         self,
         model_path: ModelPathManager,
-        wandb_notifications: bool = True,
-        use_prediction_store: bool = True,
+        wandb_notifications: bool = False,
+        use_prediction_store: bool = False,
     ) -> None:
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
