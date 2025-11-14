@@ -4,11 +4,11 @@ import pandas as pd
 import logging
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
-from typing import List, Dict, Callable
+from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
 from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
 import tqdm
-from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
 from functools import partial
 
@@ -41,46 +41,6 @@ class StepshifterModel:
         else:
             return {}
 
-    def _execute_parallel(self, func: Callable, items: List, desc: str, max_workers: int=None):
-        """
-        Executes a function in parallel, automatically choosing
-        ThreadPoolExecutor for CUDA or ProcessPoolExecutor for CPU.
-
-        Args:
-            func: The function to execute.
-            items: A list of items to submit to the function.
-            desc: The description for the tqdm progress bar.
-            max_workers: The max_workers for the ThreadPoolExecutor (for CUDA).
-                         ProcessPoolExecutor will use its default.
-        Returns:
-            A list of results, in the order the items were submitted.
-        """
-        if self.get_device_params().get("device") == "cuda":
-            ExecutorClass = ThreadPoolExecutor
-            mw = max_workers if max_workers is not None else len(items)
-            executor_kwargs = {"max_workers": mw}
-            desc_prefix = "GPU"
-        else:
-            ExecutorClass = ProcessPoolExecutor
-            executor_kwargs = {} 
-            desc_prefix = "CPU"
-        
-        # Store results by their original index to return them in order
-        futures = {}
-        results = [None] * len(items)
-
-        with ExecutorClass(**executor_kwargs) as executor:
-            for index, item in enumerate(items):
-                future = executor.submit(func, item)
-                futures[future] = index
-            
-            full_desc = f"{desc_prefix}: {desc}"
-            for future in tqdm.tqdm(as_completed(futures.keys()), desc=full_desc, total=len(futures)):
-                index = futures[future]
-                results[index] = future.result()
-
-        return results
-
     def _resolve_reg_model(self, func_name: str):
         """
         Lookup table for supported regression models
@@ -90,7 +50,6 @@ class StepshifterModel:
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
                     cuda_params = {"tree_method": "hist", "device": "cuda"}
@@ -98,7 +57,6 @@ class StepshifterModel:
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
-
                 if self.get_device_params().get("device") == "cuda":
                     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
                     cuda_params = {"tree_method": "hist", "device": "cuda"}
@@ -106,11 +64,10 @@ class StepshifterModel:
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-
-                if self.get_device_params().get("device") == "cuda":
-                    logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
-                    cuda_params = {"device": "cuda"}
-                    return partial(LightGBMModel, **cuda_params)
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
+                #     cuda_params = {"device": "cuda"}
+                #     return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
                 from darts.models import RandomForest
@@ -186,7 +143,7 @@ class StepshifterModel:
         model.fit(self._target_train, past_covariates=self._past_cov)
         return model
 
-    def _predict(self, model, step: int, sequence_number: int=0):
+    def _predict_by_step(self, model, step: int, sequence_number: int):
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
@@ -224,162 +181,128 @@ class StepshifterModel:
         )
 
         return df_preds.sort_index()
-    
-    def _predict_by_step(self, step: int, sequence_number: int=0):
-        # Help function for parallel execution
-        return self._predict(self._models[step], step, sequence_number)
 
     def _predict_by_sequence(self, sequence_number):
         pred_by_step = []
         for step in self._steps:
-            pred = self._predict_by_step(step, sequence_number)
+            pred = self._predict_by_step(self._models[step], step, sequence_number)
             pred_by_step.append(pred)
         return pd.concat(pred_by_step, axis=0).sort_index()
-    
-    @views_validate
-    def fit(self, df: pd.DataFrame):
-        df = self._process_data(df)
-        self._prepare_time_series(df)
-        self._reg = self._resolve_reg_model(self._config["model_reg"])
-
-        model_list = self._execute_parallel(
-            func=self._fit_by_step,
-            items=self._steps,
-            desc="Fitting models for steps"
-        )
-        
-        self._models = {step: model for step, model in zip(self._steps, model_list)}
-        self.is_fitted_ = True
-
-    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
-        check_is_fitted(self, "is_fitted_")
-
-        if run_type != "forecasting":
-            total_sequence_number = (
-                ForecastingModelManager._resolve_evaluation_sequence_number(
-                    eval_type
-                )
-            )
-
-            sequence_numbers = list(range(total_sequence_number))
-            preds = self._execute_parallel(
-                func=self._predict_by_sequence,
-                items=sequence_numbers,
-                desc="Predicting for sequence number"
-            )
-            
-        else:
-            preds_by_step = self._execute_parallel(
-                func=self._predict_by_step,
-                items=self._steps,
-                desc="Predicting outcomes"
-            )
-            
-            preds = pd.concat(preds_by_step, axis=0).sort_index()
-
-        return preds
-    
 
     # @views_validate
     # def fit(self, df: pd.DataFrame):
     #     df = self._process_data(df)
     #     self._prepare_time_series(df)
     #     self._reg = self._resolve_reg_model(self._config["model_reg"])
-
-    #     models = {}
-    #     if self.get_device_params().get("device") == "cuda":
-    #         for step in tqdm.tqdm(
-    #             self._steps, desc="Fitting model for step", leave=True
-    #         ):
-    #             model = self._reg(lags_past_covariates=[-step], **self._reg_params)
-    #             model.fit(self._target_train,
-    #                         past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
-    #             self._models[step] = model
-    #     else:
-    #         with ProcessPoolExecutor() as executor:
-    #             futures = {
-    #                 executor.submit(self._fit_by_step, step): step for step in self._steps
-    #             }
-    #             for future in tqdm.tqdm(
-    #                 futures.keys(), desc="Fitting models for steps", total=len(futures)
-    #             ):
-    #                 step = futures[future]
-    #                 models[step] = future.result()
-    #             self._models = models  # Use local variable to avoid concurrent execution issues
+    #     for step in tqdm.tqdm(
+    #         self._steps, desc="Fitting model for step", leave=True
+    #     ):
+    #         model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+    #         model.fit(self._target_train,
+    #                   past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+    #         self._models[step] = model
     #     self.is_fitted_ = True
 
-    # def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
-    #     check_is_fitted(self, "is_fitted_")
+    @views_validate
+    def fit(self, df: pd.DataFrame):
+        df = self._process_data(df)
+        self._prepare_time_series(df)
+        self._reg = self._resolve_reg_model(self._config["model_reg"])
 
-    #     if run_type != "forecasting":
+        models = {}
+        if self.get_device_params().get("device") == "cuda":
+            for step in tqdm.tqdm(
+                self._steps, desc="Fitting model for step", leave=True
+            ):
+                model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                model.fit(self._target_train,
+                            past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
+                self._models[step] = model
+        else:
+            with ProcessPoolExecutor() as executor:
+                futures = {
+                    executor.submit(self._fit_by_step, step): step for step in self._steps
+                }
+                for future in tqdm.tqdm(
+                    futures.keys(), desc="Fitting models for steps", total=len(futures)
+                ):
+                    step = futures[future]
+                    models[step] = future.result()
+                self._models = models  # Use local variable to avoid concurrent execution issues
+        self.is_fitted_ = True
 
-    #         if eval_type == "standard":
-    #             total_sequence_number = (
-    #                 ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
-    #             )
+    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
+        check_is_fitted(self, "is_fitted_")
 
-    #             if self.get_device_params().get("device") == "cuda":
-    #                 preds = []
-    #                 for sequence_number in tqdm.tqdm(
-    #                     range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-    #                     desc="Predicting for sequence number",
-    #                 ):
-    #                     pred_by_step = [
-    #                         self._predict_by_step(self._models[step], step, sequence_number)
-    #                         for step in self._steps
-    #                     ]
-    #                     pred = pd.concat(pred_by_step, axis=0)
-    #                     preds.append(pred)
-    #             else:
-    #                 preds = [None] * total_sequence_number
-    #                 with ProcessPoolExecutor() as executor:
-    #                     futures = {
-    #                         executor.submit(
-    #                             self._predict_by_sequence, sequence_number
-    #                         ): sequence_number
-    #                         for sequence_number in range(total_sequence_number)
-    #                     }
+        if run_type != "forecasting":
 
-    #                     for future in tqdm.tqdm(
-    #                         as_completed(futures.keys()),
-    #                         desc="Predicting for sequence number",
-    #                         total=len(futures),
-    #                     ):
-    #                         sequence_number = futures[future]
-    #                         preds[sequence_number] = future.result()
-    #         else:
-    #             raise ValueError(
-    #                 f"{eval_type} is not supported now. Please use 'standard' evaluation type."
-    #             )
+            if eval_type == "standard":
+                total_sequence_number = (
+                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
+                )
 
-    #     else:
+                if self.get_device_params().get("device") == "cuda":
+                    preds = []
+                    for sequence_number in tqdm.tqdm(
+                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
+                        desc="Predicting for sequence number",
+                    ):
+                        pred_by_step = [
+                            self._predict_by_step(self._models[step], step, sequence_number)
+                            for step in self._steps
+                        ]
+                        pred = pd.concat(pred_by_step, axis=0)
+                        preds.append(pred)
+                else:
+                    preds = [None] * total_sequence_number
+                    with ProcessPoolExecutor() as executor:
+                        futures = {
+                            executor.submit(
+                                self._predict_by_sequence, sequence_number
+                            ): sequence_number
+                            for sequence_number in range(total_sequence_number)
+                        }
 
-    #         if self.get_device_params().get("device") == "cuda":
-    #             preds = []
-    #             for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
-    #                 preds.append(self._predict_by_step(step, 0))
-    #             preds = pd.concat(preds, axis=0).sort_index()
+                        for future in tqdm.tqdm(
+                            as_completed(futures.keys()),
+                            desc="Predicting for sequence number",
+                            total=len(futures),
+                        ):
+                            sequence_number = futures[future]
+                            preds[sequence_number] = future.result()
+            else:
+                raise ValueError(
+                    f"{eval_type} is not supported now. Please use 'standard' evaluation type."
+                )
+
+        else:
+
+            if self.get_device_params().get("device") == "cuda":
+                preds = []
+                for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
+                    preds.append(self._predict_by_step(self._models[step], step, 0))
+                preds = pd.concat(preds, axis=0).sort_index()
                 
-    #         else:
-    #             with ProcessPoolExecutor() as executor:
-    #                 futures = {
-    #                     step: executor.submit(
-    #                         self._predict_by_step, step, 0
-    #                     )
-    #                     for step in self._steps
-    #                 }
-    #                 preds_by_step = [
-    #                     future.result()
-    #                     for future in tqdm.tqdm(
-    #                         as_completed(futures.values()),
-    #                         desc="Predicting outcomes",
-    #                         total=len(futures),
-    #                     )
-    #                 ]
+            else:
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        step: executor.submit(
+                            self._predict_by_step, self._models[step], step, 0
+                        )
+                        for step in self._steps
+                    }
+                    preds_by_step = [
+                        future.result()
+                        for future in tqdm.tqdm(
+                            as_completed(futures.values()),
+                            desc="Predicting outcomes",
+                            total=len(futures),
+                        )
+                    ]
 
-    #             preds = pd.concat(preds_by_step, axis=0).sort_index()
+                preds = pd.concat(preds_by_step, axis=0).sort_index()
 
-    #     return preds
+        return preds
 
     def save(self, path: str):
         try:
