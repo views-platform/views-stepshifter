@@ -107,11 +107,10 @@ class StepshifterModel:
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
 
-                # TODO: Add CUDA support for LightGBMRegressor
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
-                #     cuda_params = {"device": "cuda"}
-                #     return partial(LightGBMModel, **cuda_params)
+                if self.get_device_params().get("device") == "cuda":
+                    logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
+                    cuda_params = {"device": "cuda"}
+                    return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case "RandomForestRegressor":
                 from darts.models import RandomForest
@@ -183,7 +182,6 @@ class StepshifterModel:
         ]
 
     def _fit_by_step(self, step):
-        logger.info(f"[Step {step}] Starting model fitting...")
         model = self._reg(lags_past_covariates=[-step], **self._reg_params)
         model.fit(self._target_train, past_covariates=self._past_cov)
         return model
@@ -192,7 +190,7 @@ class StepshifterModel:
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
-        logger.info(f"[Step {step}] Starting prediction...")
+        # logger.info(f"Starting prediction for step: {step}")
         target = [
             series.slice(self._train_start, self._train_end + 1 + sequence_number)[
                 self._targets

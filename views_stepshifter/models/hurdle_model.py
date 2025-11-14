@@ -71,7 +71,6 @@ class HurdleModel(StepshifterModel):
                 )
 
     def _fit_by_step(self, step):
-        logger.info(f"[Step {step}] Starting model fitting...")
         # Fit binary-like stage using a classification model
         binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
         binary_model.fit(self._target_binary, past_covariates=self._past_cov)
