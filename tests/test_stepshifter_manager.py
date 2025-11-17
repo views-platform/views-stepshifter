@@ -6,12 +6,21 @@ from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_pipeline_core.managers.model import ModelPathManager
+from views_pipeline_core.managers.configuration.configuration import ConfigurationManager
+from views_pipeline_core.cli.args import ForecastingModelArgs
+
 
 @pytest.fixture
 def mock_model_path():
-    mock_path = MagicMock()
+    mock_path = MagicMock(spec=ModelPathManager)
     mock_path.model_dir = "/path/to/models/test_model"
     mock_path.target = "model"
+    mock_path.artifacts = Path("/path/to/artifacts")
+    mock_path.get_latest_model_artifact_path.return_value = Path("predictions_test_run_202401011200000")
+    mock_path.logging = MagicMock()
+    mock_path.models = Path("/path/to/models_root") 
+    mock_path.model_name = "test_model"
+    mock_path.data_raw = Path("/path/to/data_raw")
     return mock_path
 
 @pytest.fixture
@@ -81,26 +90,51 @@ def mock_partitioner_dict():
 
 @pytest.fixture
 def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deployment, mock_config_hyperparameters, mock_config_sweep, mock_partitioner_dict):
+    """
+    Provides a StepshifterManager instance for a non-hurdle model.
+    
+    It patches:
+    - _ModelManager__load_config: To inject mock config dictionaries.
+    - validate_config: To prevent validation errors during test setup.
+    """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)):  
+    }.get(file, None)), \
+         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
+        
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        print(manager._data_loader)
-        return manager
+        
+        manager._data_loader = MagicMock()
+        manager._data_loader.partition_dict = mock_partitioner_dict
+        
+        yield manager
 
 @pytest.fixture
-def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_config_deployment, mock_config_hyperparameters_hurdle, mock_config_sweep):
+def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_config_deployment, mock_config_hyperparameters_hurdle, mock_config_sweep, mock_partitioner_dict):
+    """
+    Provides a StepshifterManager instance for a hurdle model.
+    
+    It patches:
+    - _ModelManager__load_config: To inject mock config dictionaries.
+    - validate_config: To prevent validation errors during test setup.
+    """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta_hurdle,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters_hurdle,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)):  
+    }.get(file, None)), \
+         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
+        
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        return manager
+        
+        manager._data_loader = MagicMock()
+        manager._data_loader.partition_dict = mock_partitioner_dict
+
+        yield manager
 
 def test_stepshifter_manager_init_hurdle(stepshifter_manager_hurdle):
     """
@@ -147,7 +181,8 @@ def test_split_hurdle_parameters(stepshifter_manager_hurdle):
     """
     Test the _split_hurdle_parameters method to ensure it correctly splits the parameters for HurdleModel.
     """
-    stepshifter_manager_hurdle.config = {
+    stepshifter_manager_hurdle.configs = {
+        "algorithm": "HurdleModel",
         "clf_param1": "value1",
         "clf_param2": "value2",
         "reg_param1": "value3",
@@ -164,7 +199,14 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
     with patch("views_stepshifter.manager.stepshifter_manager.HurdleModel") as mock_hurdle_model, \
         patch("views_stepshifter.manager.stepshifter_manager.StepshifterModel") as mock_stepshifter_model:
         
-        stepshifter_manager_hurdle.config = stepshifter_manager_hurdle._update_single_config(MagicMock(run_type="test_run_type"))
+        # --- Test Hurdle ---
+        args = ForecastingModelArgs(run_type="test_run_type", saved=True)
+        
+        # We must include the "algorithm" key, otherwise _is_hurdle gets reset to False
+        hurdle_args = vars(args)
+        hurdle_args["algorithm"] = "HurdleModel"
+        stepshifter_manager_hurdle.configs = hurdle_args
+        
         stepshifter_manager_hurdle._get_model(mock_partitioner_dict)
         mock_hurdle_model.assert_called_once_with(stepshifter_manager_hurdle.config, mock_partitioner_dict)
         mock_stepshifter_model.assert_not_called()
@@ -172,7 +214,12 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         mock_hurdle_model.reset_mock()
         mock_stepshifter_model.reset_mock()
 
-        stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
+        # --- Test Non-Hurdle ---
+        args = ForecastingModelArgs(run_type="test_run_type", saved=True)
+        non_hurdle_args = vars(args)
+        non_hurdle_args["algorithm"] = "LightGBMModel"
+        stepshifter_manager.configs = non_hurdle_args
+
         stepshifter_manager._get_model(mock_partitioner_dict)
         mock_stepshifter_model.assert_called_once_with(stepshifter_manager.config, mock_partitioner_dict)
         mock_hurdle_model.assert_not_called()
@@ -185,9 +232,13 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
         patch("views_stepshifter.manager.stepshifter_manager.StepshifterManager._get_model") as mock_get_model:
 
-        # StepshifterManager with StepshifterModel
-        stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
-        stepshifter_manager.config["sweep"] = False
+        # --- Test Non-Hurdle ---
+        args = ForecastingModelArgs(run_type="test_run_type", train=True)
+        non_hurdle_args = vars(args)
+        non_hurdle_args["algorithm"] = "LightGBMModel"
+        non_hurdle_args["sweep"] = False 
+        stepshifter_manager.configs = non_hurdle_args
+
         stepshifter_manager._train_model_artifact()
 
         mock_split_hurdle.assert_not_called()
@@ -197,11 +248,22 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         mock_get_model.return_value.fit.assert_called_once()
         mock_get_model.return_value.save.assert_called_once()
 
-        # StepshifterManager with HurdleModel
-        stepshifter_manager_hurdle.config = stepshifter_manager_hurdle._update_single_config(MagicMock(run_type="test_run_type"))
+        mock_read_dataframe.reset_mock()
+        mock_get_model.reset_mock()
+        
+        mock_split_hurdle.reset_mock()
+
+        # --- Test Hurdle ---
+        args = ForecastingModelArgs(run_type="test_run_type", train=True)
+        hurdle_args = vars(args)
+        hurdle_args["algorithm"] = "HurdleModel"
+        stepshifter_manager_hurdle.configs = hurdle_args
+        stepshifter_manager_hurdle._is_hurdle = True
+        
         stepshifter_manager_hurdle._train_model_artifact()
 
-        mock_split_hurdle.assert_called_once()
+        mock_read_dataframe.assert_called_once()
+        mock_get_model.assert_called_once_with(stepshifter_manager_hurdle._data_loader.partition_dict)
 
 def test_evaluate_model_artifact(stepshifter_manager):
     """
@@ -215,9 +277,10 @@ def test_evaluate_model_artifact(stepshifter_manager):
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
 
         
-        # the else branch
-        stepshifter_manager._model_path.get_latest_model_artifact_path.return_value = Path("predictions_test_run_202401011200000")
-        stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
+        # --- Test default artifact branch (else) ---
+        args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+
         eval_type = "test_eval_type"
         artifact_name = None
         stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
@@ -225,20 +288,19 @@ def test_evaluate_model_artifact(stepshifter_manager):
         assert stepshifter_manager.config["run_type"] == "test_run_type"
         mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
         assert stepshifter_manager.config["timestamp"] == "202401011200000"
-        # mock_read_dataframe.assert_called_once()
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
 
-
-        # the if branch
+        # --- Test specific artifact branch (if) ---
         artifact_name = "non_default_artifact.pkl"
-        stepshifter_manager._model_path.artifacts = Path("predictions_test_run_202401011200000")
+        expected_path = stepshifter_manager._model_path.artifacts / artifact_name
+        
         stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
         
         mock_logger.info.assert_called_once_with(f"Using (non-default) artifact: {artifact_name}")
-        path_artifact = stepshifter_manager._model_path.artifacts / artifact_name
-        assert path_artifact == Path("predictions_test_run_202401011200000/non_default_artifact.pkl")
+        assert expected_path == Path("/path/to/artifacts/non_default_artifact.pkl")
+
 
 def test_forecast_model_artifact(stepshifter_manager):
     """
@@ -252,35 +314,34 @@ def test_forecast_model_artifact(stepshifter_manager):
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
 
         
-        # the else branch
-        # mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
-        stepshifter_manager._model_path.get_latest_model_artifact_path.return_value = Path("predictions_test_run_202401011200000")
-        stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
+        # --- Test default artifact branch (else) ---
+        args = ForecastingModelArgs(run_type="forecasting", forecast=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+        
         artifact_name = None
         stepshifter_manager._forecast_model_artifact(artifact_name)
 
-        assert stepshifter_manager.config["run_type"] == "test_run_type"
-        mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
-        assert stepshifter_manager.config["timestamp"] == "202401011200000"
-        # mock_read_dataframe.assert_called_once()
-        mock_model.predict.assert_called_once_with("test_run_type")
+        assert stepshifter_manager.config["run_type"] == "forecasting"
+        mock_logger.info.assert_called_once_with(f"Using latest (default) run type (forecasting) specific artifact")
+        mock_model.predict.assert_called_once_with("forecasting")
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
+        mock_model.predict.reset_mock()
+        mock_get_standardized_df.reset_mock()
 
-
-        # the if branch
+        # --- Test specific artifact branch (if) with FileNotFoundError ---
         mock_builtins_open.side_effect = FileNotFoundError("Test error")
         artifact_name = "non_default_artifact.pkl"
-        stepshifter_manager._model_path.artifacts = Path("predictions_test_run_202401011200000")
+        
         with pytest.raises(FileNotFoundError) as exc_info:
             stepshifter_manager._forecast_model_artifact(artifact_name)
+        
         assert str(exc_info.value) == "Test error"
         
-        
         mock_logger.info.assert_called_once_with(f"Using (non-default) artifact: {artifact_name}")
-        path_artifact = stepshifter_manager._model_path.artifacts / artifact_name 
-        assert path_artifact == Path("predictions_test_run_202401011200000/non_default_artifact.pkl")
+        path_artifact = stepshifter_manager._model_path.artifacts / artifact_name
+        assert path_artifact == Path("/path/to/artifacts/non_default_artifact.pkl")
         mock_logger.exception.assert_called_once_with(f"Model artifact not found at {path_artifact}")
 
 def test_evaluate_sweep(stepshifter_manager):
@@ -292,12 +353,12 @@ def test_evaluate_sweep(stepshifter_manager):
     with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
         
-        # mock_read_dataframe.return_value = pd.DataFrame({"a": [1, 2, 3]})
-        stepshifter_manager.config = stepshifter_manager._update_single_config(MagicMock(run_type="test_run_type"))
+        args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+
         eval_type = "test_eval_type"
         stepshifter_manager._evaluate_sweep(eval_type, mock_model)
 
         assert stepshifter_manager.config["run_type"] == "test_run_type"
-        # mock_read_dataframe.assert_called_once()
         mock_model.predict.assert_called_once_with("test_run_type", eval_type)
         mock_get_standardized_df.assert_called_once()
