@@ -42,28 +42,22 @@ class HurdleModel(StepshifterModel):
 
         match func_name:
             case "XGBClassifier":
-                from views_stepshifter.models.darts_model import XGBClassifierModel
-                if self.get_device_params().get("device") == "cuda":
-                    logger.info("\033[92mUsing CUDA for XGBClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
-                    return partial(XGBClassifierModel, **cuda_params)
+                from darts.models import XGBClassifierModel
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for XGBClassifierModel\033[0m")
+                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
+                #     return partial(XGBClassifierModel, **cuda_params)
                 return XGBClassifierModel
             case "XGBRFClassifier":
                 from views_stepshifter.models.darts_model import XGBRFClassifierModel
-                if self.get_device_params().get("device") == "cuda":
-                    logger.info("\033[92mUsing CUDA for XGBRFClassifierModel\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
-                    return partial(XGBRFClassifierModel, **cuda_params)
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for XGBRFClassifierModel\033[0m")
+                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
+                #     return partial(XGBRFClassifierModel, **cuda_params)
                 return XGBRFClassifierModel
             case "LGBMClassifier":
-                from views_stepshifter.models.darts_model import LightGBMClassifierModel
+                from darts.models import LightGBMClassifierModel
                 return LightGBMClassifierModel
-            case "RandomForestClassifier":
-                from views_stepshifter.models.darts_model import (
-                    RandomForestClassifierModel,
-                )
-
-                return RandomForestClassifierModel
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid Darts forecasting model or is not supported now. "
