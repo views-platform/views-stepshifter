@@ -112,6 +112,7 @@ class StepshifterModel:
         missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
         df = pd.concat([df, missing_df]).sort_index()
 
+        df[self._targets] = np.log1p(df[self._targets]) # Calculates log(1 + x).
         return df
 
     def _prepare_time_series(self, df: pd.DataFrame):
@@ -176,6 +177,8 @@ class StepshifterModel:
             columns=[f"pred_{self._targets}"],
         )
 
+        df_preds[f"pred_{self._targets}"] = np.expm1(df_preds[f"pred_{self._targets}"]) # Calculates exp(x) - 1
+        
         return df_preds.sort_index()
 
     def _predict_by_sequence(self, sequence_number):
