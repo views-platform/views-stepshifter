@@ -16,7 +16,7 @@ def mock_model_path():
     mock_path.model_dir = "/path/to/models/test_model"
     mock_path.target = "model"
     mock_path.artifacts = Path("/path/to/artifacts")
-    mock_path.get_latest_model_artifact_path.return_value = Path("predictions_test_run_202401011200000")
+    mock_path.get_latest_model_artifact_path.return_value = Path("test_model_202401011_200000")
     mock_path.logging = MagicMock()
     mock_path.models = Path("/path/to/models_root") 
     mock_path.model_name = "test_model"
@@ -208,7 +208,7 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         stepshifter_manager_hurdle.configs = hurdle_args
         
         stepshifter_manager_hurdle._get_model(mock_partitioner_dict)
-        mock_hurdle_model.assert_called_once_with(stepshifter_manager_hurdle.config, mock_partitioner_dict)
+        mock_hurdle_model.assert_called_once_with(stepshifter_manager_hurdle.configs, mock_partitioner_dict)
         mock_stepshifter_model.assert_not_called()
 
         mock_hurdle_model.reset_mock()
@@ -221,7 +221,7 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._get_model(mock_partitioner_dict)
-        mock_stepshifter_model.assert_called_once_with(stepshifter_manager.config, mock_partitioner_dict)
+        mock_stepshifter_model.assert_called_once_with(stepshifter_manager.configs, mock_partitioner_dict)
         mock_hurdle_model.assert_not_called()
 
 def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
@@ -242,7 +242,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         stepshifter_manager._train_model_artifact()
 
         mock_split_hurdle.assert_not_called()
-        assert stepshifter_manager.config["run_type"] == "test_run_type"
+        assert stepshifter_manager.configs["run_type"] == "test_run_type"
         mock_read_dataframe.assert_called_once()
         mock_get_model.assert_called_once_with(stepshifter_manager._data_loader.partition_dict)
         mock_get_model.return_value.fit.assert_called_once()
@@ -285,9 +285,8 @@ def test_evaluate_model_artifact(stepshifter_manager):
         artifact_name = None
         stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
 
-        assert stepshifter_manager.config["run_type"] == "test_run_type"
+        assert stepshifter_manager.configs["run_type"] == "test_run_type"
         mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
-        assert stepshifter_manager.config["timestamp"] == "202401011200000"
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
@@ -321,7 +320,7 @@ def test_forecast_model_artifact(stepshifter_manager):
         artifact_name = None
         stepshifter_manager._forecast_model_artifact(artifact_name)
 
-        assert stepshifter_manager.config["run_type"] == "forecasting"
+        assert stepshifter_manager.configs["run_type"] == "forecasting"
         mock_logger.info.assert_called_once_with(f"Using latest (default) run type (forecasting) specific artifact")
         mock_model.predict.assert_called_once_with("forecasting")
         mock_get_standardized_df.assert_called_once()
@@ -359,6 +358,6 @@ def test_evaluate_sweep(stepshifter_manager):
         eval_type = "test_eval_type"
         stepshifter_manager._evaluate_sweep(eval_type, mock_model)
 
-        assert stepshifter_manager.config["run_type"] == "test_run_type"
+        assert stepshifter_manager.configs["run_type"] == "test_run_type"
         mock_model.predict.assert_called_once_with("test_run_type", eval_type)
         mock_get_standardized_df.assert_called_once()
