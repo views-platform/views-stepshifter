@@ -153,7 +153,7 @@ class StepshifterManager(ForecastingModelManager):
             )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
-        self.configs = {"timestamp": path_artifact.stem[-15:]}
+        self.configs['timestamp'] = path_artifact.stem[-15:]
 
         try:
             with open(path_artifact, "rb") as f:
@@ -196,7 +196,7 @@ class StepshifterManager(ForecastingModelManager):
             )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
-        self.configs = {"timestamp": path_artifact.stem[-15:]}
+        self.configs['timestamp'] = path_artifact.stem[-15:]
 
         try:
             with open(path_artifact, "rb") as f:
