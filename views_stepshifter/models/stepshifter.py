@@ -6,7 +6,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
-from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
+from views_pipeline_core.managers.model import ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
@@ -44,23 +44,23 @@ class StepshifterModel:
     def _resolve_reg_model(self, func_name: str):
         """
         Lookup table for supported regression models
-        views_stepshifter.models.darts_model are custom models that inherit from darts.models
+        Note that stepshifter doesn't support cuda for now before we figure out how to move the input data to the GPU. (fit works intelligently but predict doesn't)
         """
 
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-                if self.get_device_params().get("device") == "cuda":
-                    logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
-                    return partial(XGBRFModel, **cuda_params)
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
+                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
+                #     return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
-                if self.get_device_params().get("device") == "cuda":
-                    logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                    cuda_params = {"tree_method": "hist", "device": "cuda"}
-                    return partial(XGBModel, **cuda_params)
+                # if self.get_device_params().get("device") == "cuda":
+                #     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
+                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
+                #     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
@@ -69,10 +69,6 @@ class StepshifterModel:
                 #     cuda_params = {"device": "cuda"}
                 #     return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
-            case "RandomForestRegressor":
-                from darts.models import RandomForest
-
-                return RandomForest
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid forecasting model or is not supported now. "
@@ -116,6 +112,7 @@ class StepshifterModel:
         missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
         df = pd.concat([df, missing_df]).sort_index()
 
+        df[self._targets] = np.log1p(df[self._targets]) # Calculates log(1 + x).
         return df
 
     def _prepare_time_series(self, df: pd.DataFrame):
@@ -165,7 +162,7 @@ class StepshifterModel:
         # process the predictions
         index_tuples, df_list = [], []
         for pred in ts_pred:
-            df_pred = pred.pd_dataframe().loc[
+            df_pred = pred.to_dataframe().loc[
                 [self._test_start + step + sequence_number - 1]
             ]
             level = int(pred.static_covariates.iat[0, 0])
@@ -180,6 +177,8 @@ class StepshifterModel:
             columns=[f"pred_{self._targets}"],
         )
 
+        df_preds[f"pred_{self._targets}"] = np.expm1(df_preds[f"pred_{self._targets}"]) # Calculates exp(x) - 1
+        
         return df_preds.sort_index()
 
     def _predict_by_sequence(self, sequence_number):

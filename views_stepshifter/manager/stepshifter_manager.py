@@ -58,7 +58,7 @@ class StepshifterManager(ForecastingModelManager):
         """
         clf_dict = {}
         reg_dict = {}
-        config = self.config
+        config = self.configs
 
         for key, value in config.items():
             if key.startswith("clf_"):
@@ -84,12 +84,12 @@ class StepshifterManager(ForecastingModelManager):
             The model object based on the algorithm specified in the config
         """
         if self._is_hurdle:
-            model = HurdleModel(self.config, partitioner_dict)
+            model = HurdleModel(self.configs, partitioner_dict)
         elif self._is_shurf:
-            model = ShurfModel(self.config, partitioner_dict)
+            model = ShurfModel(self.configs, partitioner_dict)
         else:
-            self.config["model_reg"] = self.config["algorithm"]
-            model = StepshifterModel(self.config, partitioner_dict)
+            self.configs = {"model_reg": self.configs["algorithm"]}
+            model = StepshifterModel(self.configs, partitioner_dict)
 
         return model
 
@@ -103,10 +103,10 @@ class StepshifterManager(ForecastingModelManager):
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         # W&B does not directly support nested dictionaries for hyperparameters
-        if self.config["sweep"] and (self._is_hurdle or self._is_shurf):
-            self.config = self._split_hurdle_parameters()
+        if self.configs["sweep"] and (self._is_hurdle or self._is_shurf):
+            self.configs = self._split_hurdle_parameters()
 
-        run_type = self.config["run_type"]
+        run_type = self.configs["run_type"]
         df_viewser = read_dataframe(
             path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
         )
@@ -115,7 +115,7 @@ class StepshifterManager(ForecastingModelManager):
         stepshift_model = self._get_model(partitioner_dict)
         stepshift_model.fit(df_viewser)
 
-        if not self.config["sweep"]:
+        if not self.configs["sweep"]:
             model_filename = generate_model_file_name(
                 run_type, file_extension=".pkl"
             )
@@ -136,7 +136,7 @@ class StepshifterManager(ForecastingModelManager):
             A list of DataFrames containing the evaluation results
         """
         path_artifacts = self._model_path.artifacts
-        run_type = self.config["run_type"]
+        run_type = self.configs["run_type"]
 
         # if an artifact name is provided through the CLI, use it.
         # Otherwise, get the latest model artifact based on the run type
@@ -153,7 +153,7 @@ class StepshifterManager(ForecastingModelManager):
             )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
-        self.config["timestamp"] = path_artifact.stem[-15:]
+        self.configs['timestamp'] = path_artifact.stem[-15:]
 
         try:
             with open(path_artifact, "rb") as f:
@@ -179,7 +179,7 @@ class StepshifterManager(ForecastingModelManager):
             The forecasted DataFrame
         """
         path_artifacts = self._model_path.artifacts
-        run_type = self.config["run_type"]
+        run_type = self.configs["run_type"]
 
         # if an artifact name is provided through the CLI, use it.
         # Otherwise, get the latest model artifact based on the run type
@@ -196,7 +196,7 @@ class StepshifterManager(ForecastingModelManager):
             )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
-        self.config["timestamp"] = path_artifact.stem[-15:]
+        self.configs['timestamp'] = path_artifact.stem[-15:]
 
         try:
             with open(path_artifact, "rb") as f:
@@ -211,7 +211,7 @@ class StepshifterManager(ForecastingModelManager):
         return df_prediction
 
     def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
-        run_type = self.config["run_type"]
+        run_type = self.configs["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)
         df_predictions = [
