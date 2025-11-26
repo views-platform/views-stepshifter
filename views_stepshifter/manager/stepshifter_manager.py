@@ -153,7 +153,7 @@ class StepshifterManager(ForecastingModelManager):
             )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
 
-        self.configs['timestamp'] = path_artifact.stem[-15:]
+        self.configs = {"timestamp": path_artifact.stem[-15:]}
 
         try:
             with open(path_artifact, "rb") as f:
@@ -191,12 +191,12 @@ class StepshifterManager(ForecastingModelManager):
             path_artifact = path_artifacts / artifact_name
         else:
             # use the latest model artifact based on the run type
-            logger.info(
-                f"Using latest (default) run type ({run_type}) specific artifact"
-            )
             path_artifact = self._model_path.get_latest_model_artifact_path(run_type)
-
-        self.configs['timestamp'] = path_artifact.stem[-15:]
+            logger.info(
+                f"Using latest (default) run type ({run_type}) specific artifact {path_artifact.name}"
+            )
+            
+        self.configs = {"timestamp": path_artifact.stem[-15:]}
 
         try:
             with open(path_artifact, "rb") as f:
