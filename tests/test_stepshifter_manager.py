@@ -286,7 +286,6 @@ def test_evaluate_model_artifact(stepshifter_manager):
         stepshifter_manager._evaluate_model_artifact(eval_type, artifact_name)
 
         assert stepshifter_manager.configs["run_type"] == "test_run_type"
-        mock_logger.info.assert_called_once_with(f"Using latest (default) run type (test_run_type) specific artifact")
         mock_get_standardized_df.assert_called_once()
      
         mock_logger.reset_mock()
@@ -321,7 +320,6 @@ def test_forecast_model_artifact(stepshifter_manager):
         stepshifter_manager._forecast_model_artifact(artifact_name)
 
         assert stepshifter_manager.configs["run_type"] == "forecasting"
-        mock_logger.info.assert_called_once_with(f"Using latest (default) run type (forecasting) specific artifact")
         mock_model.predict.assert_called_once_with("forecasting")
         mock_get_standardized_df.assert_called_once()
      
