@@ -27,7 +27,7 @@ def mock_model_path():
 def mock_config_meta():
     return {
         "name": "test_model",
-        "algorithm": "LightGBMModel",
+        "algorithm": "LGBMRegressor",
         "targets": "test_target",
         "metrics": ["test_metric"]
     }
@@ -39,8 +39,8 @@ def mock_config_meta_hurdle():
         "algorithm": "HurdleModel",
         "targets": "test_target",
         "metrics": ["test_metric"],
-        "model_clf": "LightGBMModel",
-        "model_reg": "LightGBMModel"
+        "model_clf": "LGBMClassifier",
+        "model_reg": "LGBMRegressor"
     }
 
 @pytest.fixture
@@ -53,9 +53,10 @@ def mock_config_deployment():
 def mock_config_hyperparameters():
     return {
         "steps": [1, 2, 3],
+        "time_steps": 3,
         "parameters": {
-            "param1": "value1",
-            "param2": "value2"
+            "n_estimators": 100,
+            "n_jobs": 4,
         }
     }
 
@@ -63,12 +64,13 @@ def mock_config_hyperparameters():
 def mock_config_hyperparameters_hurdle():
     return {
         "steps": [1, 2, 3],
+        "time_steps": 3,
         "parameters": {
             "clf": {
-                "param1": "value1",
+                "n_estimators": 100,
             },
             "reg": {
-                "param2": "value2",
+                "n_estimators": 100,
             }
         }
     }
@@ -198,15 +200,13 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
     """
     with patch("views_stepshifter.manager.stepshifter_manager.HurdleModel") as mock_hurdle_model, \
         patch("views_stepshifter.manager.stepshifter_manager.StepshifterModel") as mock_stepshifter_model:
-        
+
         # --- Test Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", saved=True)
-        
-        # We must include the "algorithm" key, otherwise _is_hurdle gets reset to False
         hurdle_args = vars(args)
         hurdle_args["algorithm"] = "HurdleModel"
         stepshifter_manager_hurdle.configs = hurdle_args
-        
+
         stepshifter_manager_hurdle._get_model(mock_partitioner_dict)
         mock_hurdle_model.assert_called_once_with(stepshifter_manager_hurdle.configs, mock_partitioner_dict)
         mock_stepshifter_model.assert_not_called()
@@ -217,7 +217,7 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         # --- Test Non-Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", saved=True)
         non_hurdle_args = vars(args)
-        non_hurdle_args["algorithm"] = "LightGBMModel"
+        non_hurdle_args["algorithm"] = "LGBMRegressor"
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._get_model(mock_partitioner_dict)
@@ -235,8 +235,11 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         # --- Test Non-Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", train=True)
         non_hurdle_args = vars(args)
-        non_hurdle_args["algorithm"] = "LightGBMModel"
-        non_hurdle_args["sweep"] = False 
+        non_hurdle_args["algorithm"] = "LGBMRegressor"
+        non_hurdle_args["sweep"] = False
+        non_hurdle_args["steps"] = [1, 2, 3]
+        non_hurdle_args["time_steps"] = 3
+        non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._train_model_artifact()
@@ -250,16 +253,19 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
 
         mock_read_dataframe.reset_mock()
         mock_get_model.reset_mock()
-        
+
         mock_split_hurdle.reset_mock()
 
         # --- Test Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", train=True)
         hurdle_args = vars(args)
         hurdle_args["algorithm"] = "HurdleModel"
+        hurdle_args["steps"] = [1, 2, 3]
+        hurdle_args["time_steps"] = 3
+        hurdle_args["parameters"] = {"clf": {"n_estimators": 100}, "reg": {"n_estimators": 100}}
         stepshifter_manager_hurdle.configs = hurdle_args
         stepshifter_manager_hurdle._is_hurdle = True
-        
+
         stepshifter_manager_hurdle._train_model_artifact()
 
         mock_read_dataframe.assert_called_once()

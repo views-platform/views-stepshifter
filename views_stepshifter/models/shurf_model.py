@@ -24,13 +24,6 @@ class ShurfModel(HurdleModel):
         self._draw_dist = config["draw_dist"]
         self._draw_sigma = config["draw_sigma"]
 
-        # self._n_estimators = config['parameters']['n_estimators']
-        # self._max_features = config['max_features']
-        # self._max_depth = config['max_depth']
-        # self._max_samples = config['max_samples']
-        # self._geo_unit_samples = config['geo_unit_samples']
-        # self._n_jobs = config['n_jobs']
-
     @views_validate
     def fit(self, df: pd.DataFrame):
         """

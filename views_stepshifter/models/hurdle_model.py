@@ -7,7 +7,7 @@ from typing import List, Dict
 import logging
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,17 +43,9 @@ class HurdleModel(StepshifterModel):
         match func_name:
             case "XGBClassifier":
                 from darts.models import XGBClassifierModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for XGBClassifierModel\033[0m")
-                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
-                #     return partial(XGBClassifierModel, **cuda_params)
                 return XGBClassifierModel
             case "XGBRFClassifier":
                 from views_stepshifter.models.darts_model import XGBRFClassifierModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for XGBRFClassifierModel\033[0m")
-                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
-                #     return partial(XGBRFClassifierModel, **cuda_params)
                 return XGBRFClassifierModel
             case "LGBMClassifier":
                 from darts.models import LightGBMClassifierModel
