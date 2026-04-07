@@ -133,7 +133,7 @@ File: `tests/test_reproducibility_gate.py`
 | `test_manager_gate_rejects_incomplete_config` | End-to-end: manager rejects config missing core keys. |
 | `test_audit_manifest_accepts_valid_xgb_config` | Valid flat-parameter config passes without error. |
 | `test_audit_manifest_accepts_valid_hurdle_config` | Valid nested clf/reg config passes. |
-| `test_audit_manifest_accepts_valid_shurf_config` | Valid ShurfModel config with all 6 extra keys passes. |
+| `test_audit_manifest_accepts_valid_shurf_config` | Valid ShurfModel config with all 5 extra keys passes. |
 | `test_audit_manifest_rejects_missing_core_key` | Missing `steps` raises `MissingHyperparameterError`. |
 | `test_audit_manifest_rejects_missing_parameter_key` | Missing `n_jobs` in parameters raises. |
 | `test_audit_manifest_rejects_missing_shurf_config_key` | Missing ShurfModel top-level key raises. |
