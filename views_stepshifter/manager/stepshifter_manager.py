@@ -45,7 +45,7 @@ class StepshifterManager(ForecastingModelManager):
             else:
                 return 0 if (value == np.inf or value == -np.inf or value < 0 or np.isnan(value)) else value
 
-        df = df.map(standardize_value)
+        df = df.applymap(standardize_value)
 
         return df
 
