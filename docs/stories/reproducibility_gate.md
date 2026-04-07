@@ -1,6 +1,6 @@
 # Story: ReproducibilityGate for views-stepshifter
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-04-06
 **Origin:** views-models risk register C-05
 **Reference implementation:** `views_r2darts2.infrastructure.reproducibility_gate.ReproducibilityGate`
@@ -41,11 +41,10 @@ CORE_GENOME = ["steps", "time_steps", "parameters"]
 | Algorithm | Required in `parameters` | Additional top-level keys |
 |-----------|-------------------------|--------------------------|
 | `HurdleModel` | `clf` (dict), `reg` (dict) | — |
-| `ShurfModel` | `clf` (dict), `reg` (dict) | `submodels_to_train`, `pred_samples`, `log_target`, `draw_dist`, `draw_sigma`, `geo_unit_samples` |
+| `ShurfModel` | `clf` (dict), `reg` (dict) | `submodels_to_train`, `pred_samples`, `log_target`, `draw_dist`, `draw_sigma` |
 | `XGBRegressor` | `n_estimators`, `n_jobs` | — |
 | `XGBRFRegressor` | `n_estimators`, `n_jobs` | — |
 | `LGBMRegressor` | `n_estimators`, `n_jobs` | — |
-| `RandomForestRegressor` | `n_estimators`, `n_jobs` | — |
 
 ### Runtime enforcement
 
@@ -61,8 +60,8 @@ The gate must be importable by views-models tests:
 ```python
 from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
 
-CORE_PARAMS = set(ReproducibilityGate.CORE_GENOME)
-ALGO_PARAMS = ReproducibilityGate.ALGORITHM_GENOMES
+CORE_PARAMS = set(ReproducibilityGate.Config.CORE_GENOME)
+ALGO_PARAMS = ReproducibilityGate.Config.ALGORITHM_GENOMES
 ```
 
 ---
@@ -79,6 +78,6 @@ ALGO_PARAMS = ReproducibilityGate.ALGORITHM_GENOMES
 
 ## Notes
 
-- views-stepshifter currently has no ADRs, CICs, or governance infrastructure. This story is a starting point — consider adopting the ADR pattern from views-r2darts2 or views-baseline.
-- The `parameters` dict structure varies significantly between algorithms (nested clf/reg for Hurdle/Shurf, flat for XGB/LGBM/RF). The gate should validate structure, not just key presence.
-- ShurfModel has the most complex param requirements (6 additional top-level keys for sampling/distribution control).
+- ADR-001 and a CIC for `ReproducibilityGate` were created alongside this implementation, establishing the governance pattern for views-stepshifter.
+- The `parameters` dict structure varies significantly between algorithms (nested clf/reg for Hurdle/Shurf, flat for XGB/LGBM/RF). The gate validates structure, not just key presence.
+- ShurfModel has the most complex param requirements (5 additional top-level keys for sampling/distribution control).
