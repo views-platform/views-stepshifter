@@ -9,7 +9,7 @@ import logging
 import pickle
 import pandas as pd
 import numpy as np
-from typing import Union, Optional, List, Dict
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class StepshifterManager(ForecastingModelManager):
             else:
                 return 0 if (value == np.inf or value == -np.inf or value < 0 or np.isnan(value)) else value
 
-        df = df.applymap(standardize_value)
+        df = df.map(standardize_value)
 
         return df
 
