@@ -19,12 +19,11 @@ class StochasticSmoother(PostprocessorManager):
         self.samples = config.get("samples", 1000)
         self.target = config.get("targets")[0] # Currently only supports one target
         self.pred_col = f"pred_{self.target}"
-        self.forecast_file_suffix = None
-
-        self.smoothing_matrix = None
+        
         self.df = None
         self.smoothed_df = None
-        self._initialize_smoothing_matrix()
+        self.smoothing_matrix = self._initialize_smoothing_matrix()
+        self.forecast_file_suffix = None
         
     def _extract_forecast_file_suffix(self, forecast_file_name: Optional[str]=None):
         if forecast_file_name:
@@ -73,7 +72,8 @@ class StochasticSmoother(PostprocessorManager):
         else:
             raise ValueError(f"Invalid option: {self.option}")
         
-        self.smoothing_matrix = (smoothing_matrix * (self.samples / 1000)).astype(int)
+        smoothing_matrix = (smoothing_matrix * (self.samples / 1000)).astype(int)
+        return smoothing_matrix
     
     def _read(self, forecast_file_name: Optional[str]=None):
         self.forecast_file_suffix = self._extract_forecast_file_suffix(forecast_file_name)
