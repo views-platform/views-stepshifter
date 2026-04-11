@@ -104,6 +104,18 @@ class ReproducibilityGate:
             genome = gate.ALGORITHM_GENOMES[algo]
             parameters = config["parameters"]
 
+            # 2c. Guard against parameters=None before iterating over it.
+            # Without this guard, step 3a would raise TypeError instead of the
+            # contracted MissingHyperparameterError.
+            if parameters is None:
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    "Mandatory parameters set to None: ['parameters']. "
+                    "Implicit defaults are forbidden."
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
+
             # 3a. Audit algorithm-specific parameter keys
             missing_params = [
                 k for k in genome["parameter_keys"] if k not in parameters
