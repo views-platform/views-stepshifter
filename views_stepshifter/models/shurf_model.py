@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 class ShurfModel(HurdleModel):
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         super().__init__(config, partitioner_dict)
-        self._clf_params = self._get_parameters(config)["clf"]
-        self._reg_params = self._get_parameters(config)["reg"]
+        params = self._get_parameters(config)
+        self._clf_params = params["clf"]
+        self._reg_params = params["reg"]
 
         self._submodel_list = []
         self._submodels_to_train = config["submodels_to_train"]
@@ -27,19 +28,12 @@ class ShurfModel(HurdleModel):
     @views_validate
     def fit(self, df: pd.DataFrame):
         """
-        Generate predictions using the trained submodels.
-        This method performs the following steps:
-        1. Prepares the data for classification and regression stages.
-        2. Iterates over each submodel to generate predictions:
-            - Predicts probabilities using the classification model.
-            - Predicts target values using the regression model.
-            - Handles infinite values in predictions.
-        3. Draws samples from the distributions:
-            - For each prediction sample, combines classification and regression predictions.
-            - Applies binomial, Poisson, or lognormal distributions to generate final predictions.
-        4. Aggregates the predictions from all submodels into a final DataFrame.
-        Returns:
-            pd.DataFrame: A DataFrame containing the final set of predictions with indices set to 'draw'.
+        Train classification and regression submodels for the Shurf ensemble.
+
+        For each submodel index (``submodels_to_train``), fit one binary
+        classifier and one positive-stage regressor per step. The list of
+        trained submodels is stored in ``self._submodel_list`` for later
+        sampling in ``predict_sequence``.
         """
         df = self._process_data(df)
         self._prepare_time_series(df)

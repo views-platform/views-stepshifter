@@ -169,7 +169,7 @@ class StepshifterManager(ForecastingModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
-        
+
         df_predictions = stepshift_model.predict(run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
@@ -203,7 +203,7 @@ class StepshifterManager(ForecastingModelManager):
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact {path_artifact.name}"
             )
-            
+
         self.configs = {"timestamp": path_artifact.stem[-15:]}
 
         try:

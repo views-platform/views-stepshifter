@@ -154,8 +154,6 @@ def test_manager_gate_rejects_incomplete_config(monkeypatch):
             "config_hyperparameters.py": incomplete_hp,
             "config_sweep.py": {"parameters": {}},
         }.get(file, None),
-    ), patch(
-        "views_pipeline_core.managers.configuration.configuration.validate_config"
     ):
         mock_path = MagicMock()
         mock_path.model_dir = "/test"
@@ -256,3 +254,15 @@ def test_extra_keys_ignored():
         "totally_unknown_key": "should be fine",
     }
     ReproducibilityGate.Config.audit_manifest(config)
+
+
+def test_parameters_dict_none_rejected():
+    """config['parameters'] = None must raise MissingHyperparameterError, not TypeError."""
+    config = {
+        "algorithm": "XGBRegressor",
+        "steps": [*range(1, 37)],
+        "time_steps": 36,
+        "parameters": None,
+    }
+    with pytest.raises(MissingHyperparameterError, match="None"):
+        ReproducibilityGate.Config.audit_manifest(config)

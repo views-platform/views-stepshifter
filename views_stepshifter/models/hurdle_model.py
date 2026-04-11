@@ -34,8 +34,9 @@ class HurdleModel(StepshifterModel):
 
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         super().__init__(config, partitioner_dict)
-        self._clf_params = self._get_parameters(config)["clf"]
-        self._reg_params = self._get_parameters(config)["reg"]
+        params = self._get_parameters(config)
+        self._clf_params = params["clf"]
+        self._reg_params = params["reg"]
 
     def _resolve_clf_model(self, func_name: str):
         """Lookup table for supported classification models"""

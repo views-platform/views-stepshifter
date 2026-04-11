@@ -94,45 +94,39 @@ def mock_partitioner_dict():
 def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deployment, mock_config_hyperparameters, mock_config_sweep, mock_partitioner_dict):
     """
     Provides a StepshifterManager instance for a non-hurdle model.
-    
-    It patches:
-    - _ModelManager__load_config: To inject mock config dictionaries.
-    - validate_config: To prevent validation errors during test setup.
+
+    It patches _ModelManager__load_config to inject mock config dictionaries.
     """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)), \
-         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
-        
+    }.get(file, None)):
+
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        
+
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
-        
+
         yield manager
 
 @pytest.fixture
 def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_config_deployment, mock_config_hyperparameters_hurdle, mock_config_sweep, mock_partitioner_dict):
     """
     Provides a StepshifterManager instance for a hurdle model.
-    
-    It patches:
-    - _ModelManager__load_config: To inject mock config dictionaries.
-    - validate_config: To prevent validation errors during test setup.
+
+    It patches _ModelManager__load_config to inject mock config dictionaries.
     """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta_hurdle,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters_hurdle,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)), \
-         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
-        
+    }.get(file, None)):
+
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        
+
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
 
@@ -215,13 +209,23 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         mock_stepshifter_model.reset_mock()
 
         # --- Test Non-Hurdle ---
+        # Documents configs-setter merge semantics: assigning a single key
+        # must add model_reg without removing steps/time_steps/parameters.
         args = ForecastingModelArgs(run_type="test_run_type", saved=True)
         non_hurdle_args = vars(args)
         non_hurdle_args["algorithm"] = "LGBMRegressor"
+        non_hurdle_args["steps"] = [1, 2, 3]
+        non_hurdle_args["time_steps"] = 3
+        non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._get_model(mock_partitioner_dict)
-        mock_stepshifter_model.assert_called_once_with(stepshifter_manager.configs, mock_partitioner_dict)
+
+        assert "steps" in stepshifter_manager.configs
+        assert "time_steps" in stepshifter_manager.configs
+        assert "parameters" in stepshifter_manager.configs
+        assert stepshifter_manager.configs["model_reg"] == "LGBMRegressor"
+        mock_stepshifter_model.assert_called_once()
         mock_hurdle_model.assert_not_called()
 
 def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
