@@ -4,11 +4,12 @@ from views_pipeline_core.files.utils import read_dataframe, generate_model_file_
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
+from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
 import logging
 import pickle
 import pandas as pd
 import numpy as np
-from typing import Union, Optional, List, Dict
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,13 @@ class StepshifterManager(ForecastingModelManager):
         Returns:
             The trained model object
         """
+        # Enforce reproducibility contract before any training
+        audit_config = {
+            **self.configs,
+            "algorithm": self._config_meta["algorithm"],
+        }
+        ReproducibilityGate.Config.audit_manifest(audit_config)
+
         path_raw = self._model_path.data_raw
         path_artifacts = self._model_path.artifacts
         # W&B does not directly support nested dictionaries for hyperparameters
