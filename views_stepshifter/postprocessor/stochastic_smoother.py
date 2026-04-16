@@ -1,46 +1,31 @@
 from typing import Dict
-from views_pipeline_core.managers.model import ModelPathManager
-from views_pipeline_core.managers.postprocessor import PostprocessorManager
+from views_pipeline_core.managers.postprocessor.registry import register_postprocessor
 import pandas as pd
 import numpy as np
-from typing import Optional
-import re
-from pathlib import Path
+from pydantic import BaseModel
 import logging
 
 logger = logging.getLogger(__name__)
 
-class StochasticSmoother(PostprocessorManager):
 
-    def __init__(self, path_manager: ModelPathManager, config: Dict):
-        super().__init__(path_manager, config)
-        self.steps = len(config.get("steps", [*range(1, 36 + 1, 1)]))
-        self.option = config.get("option", 0)
-        self.samples = config.get("samples", 1000)
-        self.target = config.get("targets")[0] # Currently only supports one target
-        self.pred_col = f"pred_{self.target}"
-        
-        self.df = None
-        self.smoothed_df = None
+class StochasticSmootherConfig(BaseModel):
+    option: int
+    samples: int
+
+class StochasticSmoother:
+    def __init__(self, post_config: Dict, config: Dict):
+        """Initialize smoother options and precompute the smoothing matrix."""
+
+        self.postprocessor_config = StochasticSmootherConfig(**post_config)
+        self.option = self.postprocessor_config.option
+        self.samples = self.postprocessor_config.samples
+
+        self.steps = config.get("time_steps")
+        self.targets = config.get("regression_targets")
         self.smoothing_matrix = self._initialize_smoothing_matrix()
-        self.forecast_file_suffix = None
-        
-    def _extract_forecast_file_suffix(self, forecast_file_name: Optional[str]=None):
-        if forecast_file_name:
-            base_name = Path(forecast_file_name)
-        else:
-            base_path = self._model_path.get_latest_forecasting_file_path()
-            base_name = Path(base_path.name)
-        
-        logger.info(f"Using forecast file {base_name}")
-        match = re.search(r"(\d{8}_\d{6})", base_name.stem)
-        if match:
-            return match.group(1)
-        else:
-            raise ValueError(f"Invalid forecast file name: {forecast_file_name}")
-            
 
     def _initialize_smoothing_matrix(self):
+        """Create and scale the stochastic smoothing weight matrix."""
         ## Change to dynamic window later
         if self.steps < 10:
             raise ValueError(f"Current implementation only supports steps >= 10. Got {self.steps}.")
@@ -74,43 +59,64 @@ class StochasticSmoother(PostprocessorManager):
         
         smoothing_matrix = (smoothing_matrix * (self.samples / 1000)).astype(int)
         return smoothing_matrix
-    
-    def _read(self, forecast_file_name: Optional[str]=None):
-        self.forecast_file_suffix = self._extract_forecast_file_suffix(forecast_file_name)
-        self.df = pd.read_parquet(self._model_path.data_generated / f"predictions_forecasting_{self.forecast_file_suffix}.parquet")
         
-    def _transform(self):
-        self.smoothed_df = self.df.copy()
-        self.smoothed_df['smoothed_predictions'] = None
+    def _prepare_transform_axes(self, df: pd.DataFrame):
+        """Extract months/countries axes and validate step coverage."""
+        months = df.index.get_level_values(0).unique().sort_values()
+        countries = df.index.get_level_values(1).unique()
+        if len(months) > self.steps:
+            raise ValueError(f"Found {len(months)} unique months but time_steps is {self.steps}.")
+        return months, countries
 
-        months = self.smoothed_df.index.get_level_values(0).unique().sort_values()
-        countries = self.smoothed_df.index.get_level_values(1).unique()
+    def _get_source_values(self, df: pd.DataFrame, from_months, country, pred_col):
+        """Return source values for a source (month, country) cell if present."""
+        key = (from_months, country)
+        if key not in df.index:
+            return None
+        return df.loc[key, pred_col]
 
-        for to_step, to_months in enumerate(months):
-            for country in countries:
-                sampled_predictions = []
+    def _transform(self, df: pd.DataFrame):
+        """Build smoothed prediction columns by weighted stochastic resampling."""
+        smoothed_df = df.copy()
+        months, countries = self._prepare_transform_axes(smoothed_df)
+
+        for target in self.targets:
+            pred_col = f"pred_{target}"
+            smoothed_col = f"smoothed_{pred_col}"
+            smoothed_df[smoothed_col] = None
+
+            for to_step, to_months in enumerate(months):
                 row_weights = self.smoothing_matrix[to_step, :]
-                
-                for from_step, weight in enumerate(row_weights):
-                    if weight <= 0:
-                        continue
-                    from_months = to_months - to_step + from_step
-                    source_values = self.smoothed_df.loc[(from_months, country), self.pred_col]
-                    samples = np.random.choice(source_values, size=weight, replace=True)
-                    sampled_predictions.extend(samples)
-                self.smoothed_df.at[(to_months, country), 'smoothed_predictions'] = sampled_predictions
+                for country in countries:
+                    sampled_predictions = []
+                    
+                    for from_step, weight in enumerate(row_weights):
+                        if weight <= 0:
+                            continue
+                        from_months = to_months - to_step + from_step
+                        source_values = self._get_source_values(smoothed_df, from_months, country, pred_col)
+                        if source_values is None:
+                            continue
+                        samples = np.random.choice(source_values, size=weight, replace=True)
+                        sampled_predictions.extend(samples)
+                    smoothed_df.at[(to_months, country), smoothed_col] = sampled_predictions
 
-        return self.smoothed_df
+        return smoothed_df
 
-    def _validate(self):
-        if self.smoothed_df['smoothed_predictions'].isnull().all():
-            raise ValueError("Transformation resulted in empty smoothed_predictions.")
+    def _validate(self, smoothed_df: pd.DataFrame):
+        """Fail if any target's smoothed prediction column is entirely empty."""
+        for target in self.targets:
+            if smoothed_df[f"smoothed_pred_{target}"].isnull().all():
+                raise ValueError(f"Transformation resulted in empty smoothed_pred_{target}.")
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply smoothing transform and validate resulting prediction columns."""
+        smoothed_df = self._transform(df)
+        self._validate(smoothed_df)
+        return smoothed_df
+
+register_postprocessor("stochastic_smoother", StochasticSmoother)
+
+
+
     
-    def _save(self):
-        self.smoothed_df.to_parquet(self._model_path.data_processed / f"smoothed_predictions_forecasting_{self.forecast_file_suffix}.parquet")
-    
-    def run(self, forecast_file_name: Optional[str]=None):
-        self._read(forecast_file_name)
-        self._transform()
-        self._validate()
-        self._save()

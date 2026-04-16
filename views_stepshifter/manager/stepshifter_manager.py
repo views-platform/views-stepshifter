@@ -5,6 +5,7 @@ from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
 from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
+from views_stepshifter.postprocessor.stochastic_smoother import StochasticSmoother
 import logging
 import pickle
 import pandas as pd
@@ -227,3 +228,4 @@ class StepshifterManager(ForecastingModelManager):
         ]
 
         return df_predictions
+    
