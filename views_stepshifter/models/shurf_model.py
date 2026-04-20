@@ -58,6 +58,7 @@ class ShurfModel(HurdleModel):
             ]
         )
 
+        logger.info(f"Training {self._submodels_to_train} submodels...")
         for i in tqdm(range(self._submodels_to_train), desc="Training submodel"):
 
             for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
