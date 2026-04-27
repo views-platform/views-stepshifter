@@ -101,7 +101,7 @@ class ShurfModel(HurdleModel):
         submodel_number = 0
 
         for submodel in tqdm(
-            self._submodel_list, desc=f"Predicting submodel number", leave=True
+            self._submodel_list, desc="Predicting submodel number", leave=True
         ):
             pred_by_step_binary = [
                 self._predict_by_step(submodel[step][0], step, sequence_number)
@@ -139,7 +139,7 @@ class ShurfModel(HurdleModel):
         ].apply(lambda x: np.random.binomial(1, x, self._pred_samples))
 
         # Drawing samples from the regression model
-        if self._log_target == True:
+        if self._log_target:
             if (
                 self._draw_dist == "Poisson"
             ):  # Note: the Poisson distribution assumes a non-log-transformed target, so not defined here
@@ -162,7 +162,7 @@ class ShurfModel(HurdleModel):
                     )
                 )
 
-        if self._log_target == False:
+        if not self._log_target:
             if (
                 self._draw_dist == "Poisson"
             ):  # Note: this assumes a non-log-transformed target
@@ -207,10 +207,10 @@ class ShurfModel(HurdleModel):
 
         # Log-transforming the final predictions if the target is log-transformed, exponentiating if not, 
         # and adding a column with the log-transformed predictions
-        if self._log_target == True:
+        if self._log_target:
             final_preds_full["LogPrediction"] = final_preds_full["Prediction"]
             final_preds_full["Prediction"] = np.expm1(final_preds_full["Prediction"])
-        if self._log_target == False:
+        if not self._log_target:
             final_preds_full["LogPrediction"] = np.log1p(final_preds_full["Prediction"])
 
         final_preds_full.drop(
@@ -259,7 +259,7 @@ class ShurfModel(HurdleModel):
             if eval_type == "standard":
                 for sequence_number in tqdm(
                     range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                    desc=f"Predicting for sequence number",
+                    desc="Predicting for sequence number",
                     leave=True,
                 ):
                     temp_preds_full = self.predict_sequence(sequence_number)

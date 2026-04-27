@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import MagicMock, patch, call, Mock
+from unittest.mock import MagicMock, patch, call
 from views_stepshifter.models.hurdle_model import HurdleModel
 
 
@@ -86,7 +86,7 @@ def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
             sample_config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(sample_config["steps"]))
         }
         assert model._models == models
-        assert model.is_fitted_ == True
+        assert model.is_fitted_
 
         
     

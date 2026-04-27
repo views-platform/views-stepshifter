@@ -4,9 +4,7 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
-from views_stepshifter.models.stepshifter import StepshifterModel
 from views_pipeline_core.managers.model import ModelPathManager
-from views_pipeline_core.managers.configuration.configuration import ConfigurationManager
 from views_pipeline_core.cli.args import ForecastingModelArgs
 
 
@@ -108,6 +106,7 @@ def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deploymen
 
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
 
         yield manager
 
@@ -129,6 +128,7 @@ def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_co
 
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
 
         yield manager
 
@@ -250,7 +250,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
 
         mock_split_hurdle.assert_not_called()
         assert stepshifter_manager.configs["run_type"] == "test_run_type"
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager._data_loader.partition_dict)
         mock_get_model.return_value.fit.assert_called_once()
         mock_get_model.return_value.save.assert_called_once()
@@ -272,7 +272,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
 
         stepshifter_manager_hurdle._train_model_artifact()
 
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager_hurdle._data_loader.partition_dict)
 
 def test_evaluate_model_artifact(stepshifter_manager):
@@ -357,7 +357,7 @@ def test_evaluate_sweep(stepshifter_manager):
     """
     mock_model = MagicMock()
     mock_model.predict.return_value = ["mock_df"]
-    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
+    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe"), \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
         
         args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)
