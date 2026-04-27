@@ -11,15 +11,15 @@ The script will exit with code 0 and print success messages if all claims
 in the report are verified. It will raise an AssertionError if any claim
 is false.
 """
-import pandas as pd
-import numpy as np
 import logging
 
 # Suppress verbose logging from the library to keep output clean.
 logging.basicConfig(level=logging.ERROR)
 
-from views_stepshifter.models.hurdle_model import HurdleModel
-from views_stepshifter.models.shurf_model import ShurfModel
+import pandas as pd  # noqa: E402
+import numpy as np  # noqa: E402
+from views_stepshifter.models.hurdle_model import HurdleModel  # noqa: E402
+from views_stepshifter.models.shurf_model import ShurfModel  # noqa: E402
 
 # --- 1. SETUP: Create minimal data and configs required for execution ---
 
@@ -97,7 +97,7 @@ def verify_claim_point_prediction_format_is_float():
     first_cell_value = predictions_list[0].iloc[0, 0]
     cell_type = type(first_cell_value)
 
-    print(f"Step 2: Asserting the cell value type is a float (e.g., numpy.float64)...")
+    print("Step 2: Asserting the cell value type is a float (e.g., numpy.float64)...")
     print(f"  > Found type: {cell_type}")
     assert isinstance(first_cell_value, (float, np.floating)), f"Cell type is {cell_type}, NOT a float!"
     print("  [PASS] Cell value is a float, confirming the report's finding of a divergence.")
@@ -129,7 +129,7 @@ def verify_claim_uncertainty_prediction_format_is_list():
     first_cell_value = predictions_list[0].iloc[0, 0]
     cell_type = type(first_cell_value)
 
-    print(f"Step 2: Asserting the cell value type is a list...")
+    print("Step 2: Asserting the cell value type is a list...")
     print(f"  > Found type: {cell_type}")
     assert isinstance(first_cell_value, list), f"Cell type is {cell_type}, NOT a list!"
     print("  [PASS] Cell value is a list, confirming the report's finding of compliance.")
