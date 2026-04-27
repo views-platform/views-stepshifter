@@ -250,7 +250,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
 
         mock_split_hurdle.assert_not_called()
         assert stepshifter_manager.configs["run_type"] == "test_run_type"
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager._data_loader.partition_dict)
         mock_get_model.return_value.fit.assert_called_once()
         mock_get_model.return_value.save.assert_called_once()
@@ -272,7 +272,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
 
         stepshifter_manager_hurdle._train_model_artifact()
 
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager_hurdle._data_loader.partition_dict)
 
 def test_evaluate_model_artifact(stepshifter_manager):
