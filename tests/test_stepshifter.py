@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock, call
 from views_stepshifter.models.stepshifter import StepshifterModel
-from views_pipeline_core.managers.model import ModelManager, ForecastingModelManager
 
 @pytest.fixture
 def config():
@@ -170,7 +169,7 @@ def test_fit(config, partitioner_dict, sample_dataframe):
             config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(config["steps"]))
         }
         assert model._models == models
-        assert model.is_fitted_ == True
+        assert model.is_fitted_
 
 
 def test_predict(config, partitioner_dict, sample_dataframe):

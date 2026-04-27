@@ -8,7 +8,7 @@ import logging
 import pickle
 import pandas as pd
 import numpy as np
-from typing import List
+from typing import Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,7 @@ class StepshifterManager(ForecastingModelManager):
 
         return df_prediction
 
-    def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
+    def _evaluate_sweep(self, eval_type: str, model: Any) -> List[pd.DataFrame]:
         run_type = self.configs["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)
