@@ -113,11 +113,11 @@ class StepshifterManager(ForecastingModelManager):
             self.configs = self._split_hurdle_parameters()
 
         run_type = self.configs["run_type"]
-        df_viewser = read_dataframe(self._get_cached_data_path())
+        df_source = read_dataframe(self._get_cached_data_path())
 
         partitioner_dict = self._data_loader.partition_dict
         stepshift_model = self._get_model(partitioner_dict)
-        stepshift_model.fit(df_viewser)
+        stepshift_model.fit(df_source)
 
         if not self.configs["sweep"]:
             model_filename = generate_model_file_name(
