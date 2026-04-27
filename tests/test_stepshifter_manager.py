@@ -108,6 +108,7 @@ def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deploymen
 
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
 
         yield manager
 
@@ -129,6 +130,7 @@ def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_co
 
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
 
         yield manager
 
