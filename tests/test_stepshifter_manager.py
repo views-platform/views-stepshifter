@@ -4,9 +4,7 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
-from views_stepshifter.models.stepshifter import StepshifterModel
 from views_pipeline_core.managers.model import ModelPathManager
-from views_pipeline_core.managers.configuration.configuration import ConfigurationManager
 from views_pipeline_core.cli.args import ForecastingModelArgs
 
 
@@ -359,7 +357,7 @@ def test_evaluate_sweep(stepshifter_manager):
     """
     mock_model = MagicMock()
     mock_model.predict.return_value = ["mock_df"]
-    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
+    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe"), \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
         
         args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)
