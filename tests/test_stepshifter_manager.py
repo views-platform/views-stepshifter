@@ -4,9 +4,7 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
-from views_stepshifter.models.stepshifter import StepshifterModel
 from views_pipeline_core.managers.model import ModelPathManager
-from views_pipeline_core.managers.configuration.configuration import ConfigurationManager
 from views_pipeline_core.cli.args import ForecastingModelArgs
 
 
@@ -27,7 +25,7 @@ def mock_model_path():
 def mock_config_meta():
     return {
         "name": "test_model",
-        "algorithm": "LightGBMModel",
+        "algorithm": "LGBMRegressor",
         "targets": "test_target",
         "metrics": ["test_metric"]
     }
@@ -39,8 +37,8 @@ def mock_config_meta_hurdle():
         "algorithm": "HurdleModel",
         "targets": "test_target",
         "metrics": ["test_metric"],
-        "model_clf": "LightGBMModel",
-        "model_reg": "LightGBMModel"
+        "model_clf": "LGBMClassifier",
+        "model_reg": "LGBMRegressor"
     }
 
 @pytest.fixture
@@ -53,9 +51,10 @@ def mock_config_deployment():
 def mock_config_hyperparameters():
     return {
         "steps": [1, 2, 3],
+        "time_steps": 3,
         "parameters": {
-            "param1": "value1",
-            "param2": "value2"
+            "n_estimators": 100,
+            "n_jobs": 4,
         }
     }
 
@@ -63,12 +62,13 @@ def mock_config_hyperparameters():
 def mock_config_hyperparameters_hurdle():
     return {
         "steps": [1, 2, 3],
+        "time_steps": 3,
         "parameters": {
             "clf": {
-                "param1": "value1",
+                "n_estimators": 100,
             },
             "reg": {
-                "param2": "value2",
+                "n_estimators": 100,
             }
         }
     }
@@ -92,47 +92,43 @@ def mock_partitioner_dict():
 def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deployment, mock_config_hyperparameters, mock_config_sweep, mock_partitioner_dict):
     """
     Provides a StepshifterManager instance for a non-hurdle model.
-    
-    It patches:
-    - _ModelManager__load_config: To inject mock config dictionaries.
-    - validate_config: To prevent validation errors during test setup.
+
+    It patches _ModelManager__load_config to inject mock config dictionaries.
     """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)), \
-         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
-        
+    }.get(file, None)):
+
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        
+
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
-        
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
+
         yield manager
 
 @pytest.fixture
 def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_config_deployment, mock_config_hyperparameters_hurdle, mock_config_sweep, mock_partitioner_dict):
     """
     Provides a StepshifterManager instance for a hurdle model.
-    
-    It patches:
-    - _ModelManager__load_config: To inject mock config dictionaries.
-    - validate_config: To prevent validation errors during test setup.
+
+    It patches _ModelManager__load_config to inject mock config dictionaries.
     """
     with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta_hurdle,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters_hurdle,
         "config_sweep.py": mock_config_sweep
-    }.get(file, None)), \
-         patch("views_pipeline_core.managers.configuration.configuration.validate_config"):
-        
+    }.get(file, None)):
+
         manager = StepshifterManager(mock_model_path, use_prediction_store=False)
-        
+
         manager._data_loader = MagicMock()
         manager._data_loader.partition_dict = mock_partitioner_dict
+        manager._cached_data_path = Path("dummy_cached_df.parquet")
 
         yield manager
 
@@ -198,15 +194,13 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
     """
     with patch("views_stepshifter.manager.stepshifter_manager.HurdleModel") as mock_hurdle_model, \
         patch("views_stepshifter.manager.stepshifter_manager.StepshifterModel") as mock_stepshifter_model:
-        
+
         # --- Test Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", saved=True)
-        
-        # We must include the "algorithm" key, otherwise _is_hurdle gets reset to False
         hurdle_args = vars(args)
         hurdle_args["algorithm"] = "HurdleModel"
         stepshifter_manager_hurdle.configs = hurdle_args
-        
+
         stepshifter_manager_hurdle._get_model(mock_partitioner_dict)
         mock_hurdle_model.assert_called_once_with(stepshifter_manager_hurdle.configs, mock_partitioner_dict)
         mock_stepshifter_model.assert_not_called()
@@ -215,13 +209,23 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         mock_stepshifter_model.reset_mock()
 
         # --- Test Non-Hurdle ---
+        # Documents configs-setter merge semantics: assigning a single key
+        # must add model_reg without removing steps/time_steps/parameters.
         args = ForecastingModelArgs(run_type="test_run_type", saved=True)
         non_hurdle_args = vars(args)
-        non_hurdle_args["algorithm"] = "LightGBMModel"
+        non_hurdle_args["algorithm"] = "LGBMRegressor"
+        non_hurdle_args["steps"] = [1, 2, 3]
+        non_hurdle_args["time_steps"] = 3
+        non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._get_model(mock_partitioner_dict)
-        mock_stepshifter_model.assert_called_once_with(stepshifter_manager.configs, mock_partitioner_dict)
+
+        assert "steps" in stepshifter_manager.configs
+        assert "time_steps" in stepshifter_manager.configs
+        assert "parameters" in stepshifter_manager.configs
+        assert stepshifter_manager.configs["model_reg"] == "LGBMRegressor"
+        mock_stepshifter_model.assert_called_once()
         mock_hurdle_model.assert_not_called()
 
 def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
@@ -235,34 +239,40 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         # --- Test Non-Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", train=True)
         non_hurdle_args = vars(args)
-        non_hurdle_args["algorithm"] = "LightGBMModel"
-        non_hurdle_args["sweep"] = False 
+        non_hurdle_args["algorithm"] = "LGBMRegressor"
+        non_hurdle_args["sweep"] = False
+        non_hurdle_args["steps"] = [1, 2, 3]
+        non_hurdle_args["time_steps"] = 3
+        non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._train_model_artifact()
 
         mock_split_hurdle.assert_not_called()
         assert stepshifter_manager.configs["run_type"] == "test_run_type"
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager._data_loader.partition_dict)
         mock_get_model.return_value.fit.assert_called_once()
         mock_get_model.return_value.save.assert_called_once()
 
         mock_read_dataframe.reset_mock()
         mock_get_model.reset_mock()
-        
+
         mock_split_hurdle.reset_mock()
 
         # --- Test Hurdle ---
         args = ForecastingModelArgs(run_type="test_run_type", train=True)
         hurdle_args = vars(args)
         hurdle_args["algorithm"] = "HurdleModel"
+        hurdle_args["steps"] = [1, 2, 3]
+        hurdle_args["time_steps"] = 3
+        hurdle_args["parameters"] = {"clf": {"n_estimators": 100}, "reg": {"n_estimators": 100}}
         stepshifter_manager_hurdle.configs = hurdle_args
         stepshifter_manager_hurdle._is_hurdle = True
-        
+
         stepshifter_manager_hurdle._train_model_artifact()
 
-        mock_read_dataframe.assert_called_once()
+        mock_read_dataframe.assert_called_once_with(Path("dummy_cached_df.parquet"))
         mock_get_model.assert_called_once_with(stepshifter_manager_hurdle._data_loader.partition_dict)
 
 def test_evaluate_model_artifact(stepshifter_manager):
@@ -347,7 +357,7 @@ def test_evaluate_sweep(stepshifter_manager):
     """
     mock_model = MagicMock()
     mock_model.predict.return_value = ["mock_df"]
-    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe") as mock_read_dataframe, \
+    with patch("views_stepshifter.manager.stepshifter_manager.read_dataframe"), \
         patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df") as mock_get_standardized_df:
         
         args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)

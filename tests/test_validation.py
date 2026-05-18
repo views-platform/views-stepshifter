@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import numpy as np
 from views_stepshifter.models.validation import dataframe_is_right_format, views_validate
 
 @pytest.fixture

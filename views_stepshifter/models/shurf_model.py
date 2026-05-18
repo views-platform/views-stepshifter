@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 class ShurfModel(HurdleModel):
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         super().__init__(config, partitioner_dict)
-        self._clf_params = self._get_parameters(config)["clf"]
-        self._reg_params = self._get_parameters(config)["reg"]
+        params = self._get_parameters(config)
+        self._clf_params = params["clf"]
+        self._reg_params = params["reg"]
 
         self._submodel_list = []
         self._submodels_to_train = config["submodels_to_train"]
@@ -24,29 +25,15 @@ class ShurfModel(HurdleModel):
         self._draw_dist = config["draw_dist"]
         self._draw_sigma = config["draw_sigma"]
 
-        # self._n_estimators = config['parameters']['n_estimators']
-        # self._max_features = config['max_features']
-        # self._max_depth = config['max_depth']
-        # self._max_samples = config['max_samples']
-        # self._geo_unit_samples = config['geo_unit_samples']
-        # self._n_jobs = config['n_jobs']
-
     @views_validate
     def fit(self, df: pd.DataFrame):
         """
-        Generate predictions using the trained submodels.
-        This method performs the following steps:
-        1. Prepares the data for classification and regression stages.
-        2. Iterates over each submodel to generate predictions:
-            - Predicts probabilities using the classification model.
-            - Predicts target values using the regression model.
-            - Handles infinite values in predictions.
-        3. Draws samples from the distributions:
-            - For each prediction sample, combines classification and regression predictions.
-            - Applies binomial, Poisson, or lognormal distributions to generate final predictions.
-        4. Aggregates the predictions from all submodels into a final DataFrame.
-        Returns:
-            pd.DataFrame: A DataFrame containing the final set of predictions with indices set to 'draw'.
+        Train classification and regression submodels for the Shurf ensemble.
+
+        For each submodel index (``submodels_to_train``), fit one binary
+        classifier and one positive-stage regressor per step. The list of
+        trained submodels is stored in ``self._submodel_list`` for later
+        sampling in ``predict_sequence``.
         """
         df = self._process_data(df)
         self._prepare_time_series(df)
@@ -114,7 +101,7 @@ class ShurfModel(HurdleModel):
         submodel_number = 0
 
         for submodel in tqdm(
-            self._submodel_list, desc=f"Predicting submodel number", leave=True
+            self._submodel_list, desc="Predicting submodel number", leave=True
         ):
             pred_by_step_binary = [
                 self._predict_by_step(submodel[step][0], step, sequence_number)
@@ -152,7 +139,7 @@ class ShurfModel(HurdleModel):
         ].apply(lambda x: np.random.binomial(1, x, self._pred_samples))
 
         # Drawing samples from the regression model
-        if self._log_target == True:
+        if self._log_target:
             if (
                 self._draw_dist == "Poisson"
             ):  # Note: the Poisson distribution assumes a non-log-transformed target, so not defined here
@@ -175,7 +162,7 @@ class ShurfModel(HurdleModel):
                     )
                 )
 
-        if self._log_target == False:
+        if not self._log_target:
             if (
                 self._draw_dist == "Poisson"
             ):  # Note: this assumes a non-log-transformed target
@@ -220,10 +207,10 @@ class ShurfModel(HurdleModel):
 
         # Log-transforming the final predictions if the target is log-transformed, exponentiating if not, 
         # and adding a column with the log-transformed predictions
-        if self._log_target == True:
+        if self._log_target:
             final_preds_full["LogPrediction"] = final_preds_full["Prediction"]
             final_preds_full["Prediction"] = np.expm1(final_preds_full["Prediction"])
-        if self._log_target == False:
+        if not self._log_target:
             final_preds_full["LogPrediction"] = np.log1p(final_preds_full["Prediction"])
 
         final_preds_full.drop(
@@ -272,7 +259,7 @@ class ShurfModel(HurdleModel):
             if eval_type == "standard":
                 for sequence_number in tqdm(
                     range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                    desc=f"Predicting for sequence number",
+                    desc="Predicting for sequence number",
                     leave=True,
                 ):
                     temp_preds_full = self.predict_sequence(sequence_number)

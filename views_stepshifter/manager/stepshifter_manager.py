@@ -1,14 +1,14 @@
 from views_pipeline_core.managers.model import ModelPathManager, ForecastingModelManager
-from views_pipeline_core.configs.pipeline import PipelineConfig
 from views_pipeline_core.files.utils import read_dataframe, generate_model_file_name
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
+from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
 import logging
 import pickle
 import pandas as pd
 import numpy as np
-from typing import Union, Optional, List, Dict
+from typing import Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -100,20 +100,24 @@ class StepshifterManager(ForecastingModelManager):
         Returns:
             The trained model object
         """
-        path_raw = self._model_path.data_raw
+        # Enforce reproducibility contract before any training
+        audit_config = {
+            **self.configs,
+            "algorithm": self._config_meta["algorithm"],
+        }
+        ReproducibilityGate.Config.audit_manifest(audit_config)
+
         path_artifacts = self._model_path.artifacts
         # W&B does not directly support nested dictionaries for hyperparameters
         if self.configs["sweep"] and (self._is_hurdle or self._is_shurf):
             self.configs = self._split_hurdle_parameters()
 
         run_type = self.configs["run_type"]
-        df_viewser = read_dataframe(
-            path_raw / f"{run_type}_viewser_df{PipelineConfig.dataframe_format}"
-        )
+        df_source = read_dataframe(self._get_cached_data_path())
 
         partitioner_dict = self._data_loader.partition_dict
         stepshift_model = self._get_model(partitioner_dict)
-        stepshift_model.fit(df_viewser)
+        stepshift_model.fit(df_source)
 
         if not self.configs["sweep"]:
             model_filename = generate_model_file_name(
@@ -161,7 +165,7 @@ class StepshifterManager(ForecastingModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
-        
+
         df_predictions = stepshift_model.predict(run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
@@ -195,7 +199,7 @@ class StepshifterManager(ForecastingModelManager):
             logger.info(
                 f"Using latest (default) run type ({run_type}) specific artifact {path_artifact.name}"
             )
-            
+
         self.configs = {"timestamp": path_artifact.stem[-15:]}
 
         try:
@@ -210,7 +214,7 @@ class StepshifterManager(ForecastingModelManager):
 
         return df_prediction
 
-    def _evaluate_sweep(self, eval_type: str, model: any) -> List[pd.DataFrame]:
+    def _evaluate_sweep(self, eval_type: str, model: Any) -> List[pd.DataFrame]:
         run_type = self.configs["run_type"]
 
         df_predictions = model.predict(run_type, eval_type)

@@ -10,7 +10,6 @@ from views_pipeline_core.managers.model import ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import torch
-from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -50,24 +49,12 @@ class StepshifterModel:
         match func_name:
             case "XGBRFRegressor":
                 from views_stepshifter.models.darts_model import XGBRFModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for XGBRFRegressor\033[0m")
-                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
-                #     return partial(XGBRFModel, **cuda_params)
                 return XGBRFModel
             case "XGBRegressor":
                 from darts.models import XGBModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for XGBRegressor\033[0m")
-                #     cuda_params = {"tree_method": "hist", "device": "cuda"}
-                #     return partial(XGBModel, **cuda_params)
                 return XGBModel
             case "LGBMRegressor":
                 from darts.models import LightGBMModel
-                # if self.get_device_params().get("device") == "cuda":
-                #     logger.info("\033[92mUsing CUDA for LGBMRegressor\033[0m")
-                #     cuda_params = {"device": "cuda"}
-                #     return partial(LightGBMModel, **cuda_params)
                 return LightGBMModel
             case _:
                 raise ValueError(
@@ -112,7 +99,6 @@ class StepshifterModel:
         missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
         df = pd.concat([df, missing_df]).sort_index()
 
-        df[self._targets] = np.log1p(df[self._targets]) # Calculates log(1 + x).
         return df
 
     def _prepare_time_series(self, df: pd.DataFrame):
@@ -177,8 +163,6 @@ class StepshifterModel:
             columns=[f"pred_{self._targets}"],
         )
 
-        df_preds[f"pred_{self._targets}"] = np.expm1(df_preds[f"pred_{self._targets}"]) # Calculates exp(x) - 1
-        
         return df_preds.sort_index()
 
     def _predict_by_sequence(self, sequence_number):
@@ -187,20 +171,6 @@ class StepshifterModel:
             pred = self._predict_by_step(self._models[step], step, sequence_number)
             pred_by_step.append(pred)
         return pd.concat(pred_by_step, axis=0).sort_index()
-
-    # @views_validate
-    # def fit(self, df: pd.DataFrame):
-    #     df = self._process_data(df)
-    #     self._prepare_time_series(df)
-    #     self._reg = self._resolve_reg_model(self._config["model_reg"])
-    #     for step in tqdm.tqdm(
-    #         self._steps, desc="Fitting model for step", leave=True
-    #     ):
-    #         model = self._reg(lags_past_covariates=[-step], **self._reg_params)
-    #         model.fit(self._target_train,
-    #                   past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
-    #         self._models[step] = model
-    #     self.is_fitted_ = True
 
     @views_validate
     def fit(self, df: pd.DataFrame):
