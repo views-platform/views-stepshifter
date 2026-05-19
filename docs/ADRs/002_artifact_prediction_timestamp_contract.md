@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-19
-**Deciders:** Simon, VIEWS platform team
+**Deciders:** Simon Polichinel von der Maase (cross-repo audit lead)
 **Consulted:** views-pipeline-core ADR-052 (central contract)
 
 ---
@@ -52,10 +52,6 @@ Not applicable — the implementation is already correct. This ADR documents exi
 - The timestamp contract is documented in this repo, reducing the risk of accidental regression.
 - Future contributors can reference this ADR when modifying artifact loading or prediction generation.
 
-### Negative
-
-- None.
-
 ---
 
 ## Implementation Notes
@@ -77,15 +73,9 @@ Not applicable — the implementation is already correct. This ADR documents exi
 
 ---
 
-## Open Questions
-
-- None.
-
----
-
 ## References
 
-- views-pipeline-core ADR-052: Artifact-Prediction Timestamp Contract (central)
-- views-pipeline-core ADR-013: Prediction Naming Convention
-- views-hydranet ADR-026: Model Artifact Fetcher Specification
-- views-baseline ADR-016: Artifact-Prediction Timestamp Contract (bugfix record)
+- [views-pipeline-core ADR-052](https://github.com/views-platform/views-pipeline-core/blob/main/documentation/ADRs/052_artifact_prediction_timestamp_contract.md): Artifact-Prediction Timestamp Contract (central)
+- [views-pipeline-core ADR-013](https://github.com/views-platform/views-pipeline-core/blob/main/documentation/ADRs/013_prediction_naming_convention.md): Prediction Naming Convention
+- [views-hydranet ADR-026](https://github.com/views-platform/views-hydranet/blob/main/docs/ADRs/active/026_model_artifact_fetcher_specification.md): Model Artifact Fetcher Specification
+- [views-baseline ADR-016](https://github.com/views-platform/views-baseline/blob/main/docs/ADRs/016_artifact_prediction_timestamp_contract.md): Artifact-Prediction Timestamp Contract (bugfix record)
