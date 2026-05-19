@@ -25,7 +25,7 @@ This ADR documents the existing correct implementation for the record and to ens
 `StepshifterManager` (in `views_stepshifter/manager/stepshifter_manager.py`) correctly implements the artifact-prediction timestamp contract:
 
 - `_evaluate_model_artifact()` resolves the latest artifact path and extracts the 15-character timestamp from the filename stem.
-- The timestamp is persisted via `self.configs = {"timestamp": ...}`, which invokes the property setter on `ForecastingModelManager` and delegates to `self._config_manager.add_config(...)`. This is equivalent to calling `add_config()` directly (see ADR-052 for both valid forms).
+- The timestamp is persisted via `self.configs = {"timestamp": ...}`, which invokes the property setter inherited from `ModelManager` and delegates to `self._config_manager.add_config(...)`. This is equivalent to calling `add_config()` directly (see ADR-052 for both valid forms).
 - `_forecast_model_artifact()` follows the same pattern.
 
 No code changes are required. This ADR is documentation-only.
