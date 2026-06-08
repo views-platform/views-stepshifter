@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-06-08
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 15
-**Concerns:** Open 12 | Resolved 1 | Invalidated 2
+**Total entries:** 17
+**Concerns:** Open 14 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -137,7 +137,7 @@
 | **Source** | expert-review (2026-06-08) |
 | **Status** | Open |
 | **Location** | `views_stepshifter/manager/stepshifter_manager.py:163,207` (unpickle + predict); `views_stepshifter/models/stepshifter.py:_predict_by_step` (no inverse); ADR-003 Obligations |
-| **Notes** | Commit `5fcfe43` (2025-11-20 → reverted 2026-04-11 by `08ee2eb`) forced stepshifter training into log space via `np.log1p`/`np.expm1`. An artifact pickled during that window carries log-space behavior; loaded under current raw-output code it receives **no** `expm1`, so predictions stay log-compressed but are written as raw `lr_ged_sb` — silently wrong, with **no error signal**. The 2026-06-04 `big_chungus` ensemble (MSLE 2.519, **worse than the all-zeros baseline 2.147**, ~3× the fatalities002 gold standard 0.835) is the suspected materialization; the stepshifter-family constituents are broken while the four r2darts2 DL constituents (own asinh transform) are fine. **Escalates to Tier 1** if the views-models artifact audit confirms any in-production constituent was trained in a non-raw space. ADR-003 mandates load-time guard E2 (fail-loud on a missing transform stamp), but the guard is unimplemented and the artifact audit is open. See also D-16 (separate silent prediction-output transform in the same manager path) and D-13 (numerical behavior untested). Root cause documented in `docs/ADRs/003_raw_target_space_io_contract.md`. |
+| **Notes** | Commit `5fcfe43` (2025-11-20 → reverted 2026-04-11 by `08ee2eb`) forced stepshifter training into log space via `np.log1p`/`np.expm1`. An artifact pickled during that window carries log-space behavior; loaded under current raw-output code it receives **no** `expm1`, so predictions stay log-compressed but are written as raw `lr_ged_sb` — silently wrong, with **no error signal**. The 2026-06-04 `big_chungus` ensemble (MSLE 2.519, **worse than the all-zeros baseline 2.147**, ~3× the fatalities002 gold standard 0.835) is the suspected materialization; the stepshifter-family constituents are broken while the four r2darts2 DL constituents (own asinh transform) are fine. **Escalates to Tier 1** if the views-models artifact audit confirms any in-production constituent was trained in a non-raw space. ADR-003 mandates load-time guard E2 (fail-loud on a missing transform stamp), but the guard is unimplemented and the artifact audit is open. See also D-16 (separate silent prediction-output transform in the same manager path) and D-13 (numerical behavior untested). Root cause documented in `docs/ADRs/003_raw_target_space_io_contract.md`. **Falsification caveat (2026-06-08, `/falsify` P3+P6):** the audit reframes the **leading** cause as **"no target compression after the revert" (trained-raw)**, not the stale-log-artifact *mismatch* this title emphasizes — every locally inspected stepshifter artifact post-dates the revert and none from the log window were found. But the diagnosis is still **inferential**: the actual `big_chungus` constituent predictions were never inspected (the calibration reports' "Prediction Samples" were available and unused), and the actual constituent artifacts (WandB `2689xjtl`) were never opened. Confidence = "leading hypothesis", not confirmed; re-run `/falsify` after the dossier's real-data EXP-01. |
 
 ---
 
@@ -164,6 +164,32 @@
 | **Status** | Open |
 | **Location** | `docs/ADRs/003_raw_target_space_io_contract.md` (`⟨PENDING — views-pipeline-core ADR-XXX⟩` placeholder + clause 6) |
 | **Notes** | ADR-003 scopes its own authority to stepshifter but cites a forthcoming **platform-wide** views-pipeline-core ADR as the body that will ratify (a) model-internal transforms with raw I/O, (b) deprecation of the `lr_`/`ln_`/`lx_` prefix scheme, and (c) config-as-source-of-truth. That ADR does not exist yet; the platform rule currently lives only in pipeline-core **plans** (`2026-03-15`, `2026-06-01` C-140), not a ratified ADR. If it stalls, ADR-003 holds an unbacked cross-repo claim and the `ADR-XXX` reference stays dangling; if it ratifies with different semantics (e.g. keeps the prefix scheme), ADR-003 must be amended. Closes when the platform ADR is ratified and its number is filled into the placeholder. |
+
+---
+
+### D-20 — Ensemble combination/calibration step never audited as a divergence contributor
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When attributing the `big_chungus` (or any ensemble) cm MSLE to constituent quality, first reconstruct the ensemble from its constituent predictions and confirm the combination/calibration step adds no independent error. |
+| **Source** | falsification-audit (2026-06-08) |
+| **Status** | Open |
+| **Location** | 2026-06-04 `big_chungus` run; ensemble combination/calibration (views-evaluation / pipeline-core — outside this repo) |
+| **Notes** | `big_chungus` scored cm MSLE 2.519 — worse than **17 of its 26 constituents**, including all four DL models (~0.5) and the historical-average baseline (0.581). A combination containing four ~0.5 models landing at 2.519 is only explained if a few extreme over-predictors dominate the mean **or** if the calibration/combination step adds independent error. The investigation never examined the ensemble step, so it is **not ruled out** as a second contributor. The per-constituent breakage (each stepshifter model worse than its own all-zeros baseline) is independent of this and stands. Cross-repo: the ensemble lives in views-evaluation/pipeline-core. Surfaced by `/falsify` P1. See also D-17. |
+
+---
+
+### D-21 — `plastic_beach` ≡ `brown_cheese` byte-identical eval metrics from different configs (probable artifact/prediction mislink)
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | When trusting per-constituent eval metrics for the 2026-06-04 run (or any multi-model run), verify each model's reported metrics derive from its own artifact/prediction file. |
+| **Source** | falsification-audit (2026-06-08) |
+| **Status** | Open |
+| **Location** | 2026-06-04 calibration report `report_calibration_model_20260604_230304_lr_ged_sb.html`; views-models `plastic_beach` vs `brown_cheese` configs |
+| **Notes** | `plastic_beach` and `brown_cheese` reported **byte-identical** metrics (RMSLE 2.048527, MSE 51521.055532, MSLE 4.196935, ŷ 43.696734) despite confirmed-different querysets (aquastat vs baseline) and configs. Two distinct models producing byte-identical metrics is essentially impossible by chance → a probable prediction-file/artifact mislink, meaning at least one model's reported performance is **wrong with no error signal**. This is a **second, separate defect** from the no-compression root cause (D-17) — i.e. the divergence investigation has **not** located a single "the" error. **Escalates to Tier 1** if the mislink affects stored/published predictions rather than only the report's metric table. Surfaced by `/falsify` P5. |
 
 ---
 
