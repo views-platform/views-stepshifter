@@ -26,6 +26,20 @@ For each stepshifter model family, **which `target_transform` ∈ {`identity`, `
 2. **Validate on the real pipeline** for the surviving transform(s) on a small set of representative `big_chungus` models (one per family: Hurdle, flat XGB/LGBM/RF).
 3. **Decide per family** and record; feed the choice into the views-models config migration (#111) and a proposed ADR.
 
+## Widened scope (expert-method-review, 2026-06-08)
+
+The original framing — *"which transform best restores cm MSLE"* — pre-commits to (a) transforms of a squared-error regressor and (b) a single scale-dependent metric, so it cannot discover a better model and can reward tail-compression that hurts the policy-relevant cases. Amendments (→ risk register D-22–D-25):
+
+1. **Add a count-likelihood arm** (Murphy; Damato2025 GP-Tweedie). `log1p` is variance-stabilisation of a **Tweedie** likelihood (point mass at 0 + continuous positive part = this DGP). Arms become **{identity, log1p, asinh, Tweedie/NB-deviance}** — if the count model dominates, the transform framing was a detour. (D-23)
+2. **Multi-component readout, not cm MSLE alone** (Gneiting, Davison, Harrell): report **cm MSLE + a tail-conditional error (error | obs > threshold) + calibration-in-the-large**. MSLE on a 90%-zero target favours zero-fit and tail-compression (Bolin2023); the winner on MSLE may be the *worst* escalation forecaster (Hegre2022; Abilasha2022). Make the zero-fit↔tail tradeoff visible. (D-22)
+3. **Retransformation-bias / calibration check** (Harrell): round-trip `inverse(forward(x))≈x` is **not** calibration. By Jensen, `E[expm1(ŷ)] ≠ expm1(E[ŷ])` — a log-space point forecast `expm1`-ed is biased low. Add prediction-space calibration per arm. (D-25)
+4. **Real-DGP posterior predictive check as an acceptance gate** (Gelman): does the chosen arm reproduce the real held-out zero-fraction *and* tail? Closes the `/falsify` P2/P3 gaps and the synthetic-evidence weakness. (D-17 caveat)
+5. **Question the hurdle** (Harrell): include a single-count-model baseline vs the HurdleModel two-stage `(x>0)` split. (D-24)
+
+**Sequencing:** ship `log1p` as the immediate restoration (Operational pragmatism — it is ADR-003-compliant and what the gold standard / DL models use); run the widened EXP-01 to decide the *durable* per-family choice. Strongest dissent to keep live: **Davison** — a transform that wins MSLE may be the worst at escalation; the tail-conditional metric is non-negotiable before declaring a winner.
+
+**Library to fetch:** Harrell *Regression Modeling Strategies*; ZIP/hurdle canonical (Lambert 1992 / Mullahy 1986); Tweedie (Jørgensen); asinh-for-counts source; Breiman *Two Cultures*.
+
 ## Relationship to ADR-003 / the mechanism
 
 This dossier does **not** build or re-decide the mechanism (registry, gate key, serialization-on-instance) — that is ADR-003 + the story (Half A). It supplies the **validated transform choice** ADR-003's mechanism will carry. The serialization stance (config-driven like hydranet vs serialized-with-artifact like r2darts2) is noted as an adjacent decision (ADR-003 currently leans serialized-on-instance) but is Half A's call.

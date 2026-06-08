@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-06-08
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 17
-**Concerns:** Open 14 | Resolved 1 | Invalidated 2
+**Total entries:** 21
+**Concerns:** Open 18 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -190,6 +190,58 @@
 | **Status** | Open |
 | **Location** | 2026-06-04 calibration report `report_calibration_model_20260604_230304_lr_ged_sb.html`; views-models `plastic_beach` vs `brown_cheese` configs |
 | **Notes** | `plastic_beach` and `brown_cheese` reported **byte-identical** metrics (RMSLE 2.048527, MSE 51521.055532, MSLE 4.196935, ŷ 43.696734) despite confirmed-different querysets (aquastat vs baseline) and configs. Two distinct models producing byte-identical metrics is essentially impossible by chance → a probable prediction-file/artifact mislink, meaning at least one model's reported performance is **wrong with no error signal**. This is a **second, separate defect** from the no-compression root cause (D-17) — i.e. the divergence investigation has **not** located a single "the" error. **Escalates to Tier 1** if the mislink affects stored/published predictions rather than only the report's metric table. Surfaced by `/falsify` P5. |
+
+---
+
+### D-22 — Transform/model selection on cm MSLE alone rewards zero-fit and tail-compression
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | When EXP-01 (or any `target_transform`/model selection) declares a winner on **cm MSLE alone**, without a tail-conditional error and a calibration readout. |
+| **Source** | expert-method-review (2026-06-08) |
+| **Status** | Open |
+| **Location** | dossier `reports/2026-06-08_restore_target_compression_dossier/02_design.md`, `04_roadmap.md` (EXP-01), `05_analysis_plan.md` |
+| **Notes** | On a ~90%-zero target, MSLE structurally favours near-zero prediction and **tail-compression** (Bolin2023 on scale-dependence of scoring rules; Gneiting2014). A transform can *win* cm MSLE while **degrading the heavy-tail / escalation predictions that are the operational product** (Hegre2022 on escalation; Davison/EVT lens, Abilasha2022). Ranking *transforms* on MSLE is also near-circular (log1p training ≈ optimising MSLE). Mitigation: report MSLE **plus** a tail-conditional error (error \| obs > threshold) **plus** calibration-in-the-large, and make the zero-fit↔tail tradeoff visible before selecting. The strongest single fix from the method review. |
+
+---
+
+### D-23 — Fix design omits a count-likelihood baseline (Tweedie/NB)
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When the fix is committed as "a target transform" without testing a count-likelihood (Tweedie / negative-binomial) arm in the readout. |
+| **Source** | expert-method-review (2026-06-08) |
+| **Status** | Open |
+| **Location** | dossier `02_design.md`, `05_analysis_plan.md` |
+| **Notes** | A squared-error regressor assumes Gaussian homoskedastic noise — false for zero-inflated heavy-tailed counts. `log1p` is the poor-man's variance-stabilisation of a **Tweedie** likelihood (point mass at zero + continuous positive part — exactly this DGP; Damato2025 GP-Tweedie for intermittent demand). By testing only transforms of a squared-error model, EXP-01 **cannot discover** that the right answer is a count-appropriate likelihood. Mitigation: add a Tweedie/NB-deviance arm to the readout (one extra arm, high information). |
+
+---
+
+### D-24 — HurdleModel dichotomization (>0 threshold) never evaluated against a single count model
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When fixing `target_transform` inside HurdleModel without evaluating its binary `(x>0)` split against a single count-model baseline. |
+| **Source** | expert-method-review (2026-06-08) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/hurdle_model.py:101`; dossier `02_design.md` |
+| **Notes** | Per Harrell (anti-dichotomization), thresholding the outcome at >0 is information-lossy and fragile; the design takes the hurdle structure as given and only fixes the transform inside it. No evidence the two-stage hurdle beats a single well-specified count model. Mitigation: include a single-count-model baseline vs the hurdle in the readout. Fetch: Harrell *Regression Modeling Strategies*; a ZIP/hurdle canonical (Lambert 1992 / Mullahy 1986). |
+
+---
+
+### D-25 — No prediction-space calibration / retransformation-bias check when a transform is active
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | When a **non-identity** `target_transform` ships and predictions are inverse-transformed (`expm1`/`sinh`) without a calibration / retransformation-bias correction. |
+| **Source** | expert-method-review (2026-06-08) |
+| **Status** | Open |
+| **Location** | dossier `03_harness_and_invariants.md §C4` (round-trip test); `views_stepshifter/models/stepshifter.py:_predict_by_step` (inverse site) |
+| **Notes** | The harness's round-trip test (`inverse(forward(x)) ≈ x`) does **not** check prediction-space calibration. By Jensen's inequality, `E[expm1(ŷ)] ≠ expm1(E[ŷ])`: a point forecast minimising squared error in log space, then `expm1`-ed, is a **systematically biased** raw-space prediction (low) — silent, no error signal. Currently dormant (`identity` only). **Activates / escalates to Tier 1** once a non-identity transform ships without a bias correction. Mitigation: calibration-in-the-large + a smooth calibration curve per arm; check retransformation bias. (Harrell.) |
 
 ---
 
