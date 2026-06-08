@@ -18,6 +18,7 @@ def config():
         'model_reg': 'RandomForestRegressor',
         'parameters': {'max_depth': 1, 'n_estimators': 100},
         'sweep': False,
+        'target_transform': 'identity',
         "metrics": ["test_metric"]
     }
 

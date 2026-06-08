@@ -14,6 +14,7 @@ def sample_config():
         "model_reg": "LGBMRegressor",
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
         "sweep": False,
+        "target_transform": "identity",
         "metrics": ["test_metric"]
     }
 
