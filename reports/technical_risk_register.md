@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-06-08
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 21
-**Concerns:** Open 18 | Resolved 1 | Invalidated 2
+**Total entries:** 22
+**Concerns:** Open 19 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -215,7 +215,7 @@
 | **Source** | expert-method-review (2026-06-08) |
 | **Status** | Open |
 | **Location** | dossier `02_design.md`, `05_analysis_plan.md` |
-| **Notes** | A squared-error regressor assumes Gaussian homoskedastic noise — false for zero-inflated heavy-tailed counts. `log1p` is the poor-man's variance-stabilisation of a **Tweedie** likelihood (point mass at zero + continuous positive part — exactly this DGP; Damato2025 GP-Tweedie for intermittent demand). By testing only transforms of a squared-error model, EXP-01 **cannot discover** that the right answer is a count-appropriate likelihood. Mitigation: add a Tweedie/NB-deviance arm to the readout (one extra arm, high information). |
+| **Notes** | A squared-error regressor assumes Gaussian homoskedastic noise — false for zero-inflated heavy-tailed counts. `log1p` is the poor-man's variance-stabilisation of a **Tweedie** likelihood (point mass at zero + continuous positive part — exactly this DGP; Damato2025 GP-Tweedie for intermittent demand). By testing only transforms of a squared-error model, EXP-01 **cannot discover** that the right answer is a count-appropriate likelihood. Mitigation: add a Tweedie/NB-deviance arm to the readout (one extra arm, high information). **Deferred by scope decision (2026-06-08):** the first proof is scoped to *stateless transforms* (`log1p`/`asinh`) on *plain* models only; Tweedie/count-likelihoods are a **future option, not a current gap** — revisit after the plain-model fix is proven. See D-26. |
 
 ---
 
@@ -242,6 +242,19 @@
 | **Status** | Open |
 | **Location** | dossier `03_harness_and_invariants.md §C4` (round-trip test); `views_stepshifter/models/stepshifter.py:_predict_by_step` (inverse site) |
 | **Notes** | The harness's round-trip test (`inverse(forward(x)) ≈ x`) does **not** check prediction-space calibration. By Jensen's inequality, `E[expm1(ŷ)] ≠ expm1(E[ŷ])`: a point forecast minimising squared error in log space, then `expm1`-ed, is a **systematically biased** raw-space prediction (low) — silent, no error signal. Currently dormant (`identity` only). **Activates / escalates to Tier 1** once a non-identity transform ships without a bias correction. Mitigation: calibration-in-the-large + a smooth calibration curve per arm; check retransformation bias. (Harrell.) |
+
+---
+
+### D-26 — "Here be dragons": HurdleModel / ShurfModel transform-centralization deferred
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | When extending the declared `target_transform` mechanism — or the EXP-01 fix result — from plain `StepshifterModel` to `HurdleModel` or `ShurfModel`. |
+| **Source** | project decision (2026-06-08) |
+| **Status** | Open (deliberately deferred) |
+| **Location** | `views_stepshifter/models/shurf_model.py:156,180,212,214` (internal `log1p`/`expm1` + dormant `log_target=True` bug); `views_stepshifter/models/hurdle_model.py` (two-stage binary split); `views_stepshifter/manager/stepshifter_manager.py:39-47` (the standardize→0 clamp, D-16) |
+| **Notes** | **Decision:** prove the transform-centralization and the over-prediction fix on **plain** stepshifter models (XGB/XGBRF/LGBM via `StepshifterModel` base) **FIRST**. `HurdleModel` and `ShurfModel` are **explicitly out of scope for now** — they carry their *own* scattered transforms (ShurfModel does `log1p`/`expm1` inside `predict_sequence`, with a dormant `log_target=True` bug; Hurdle has the binary `(x>0)` stage) that need careful, separately-tested centralization. **Significant work — here be dragons.** The plain-model proof must **not** be assumed to generalize to them, and must not be extended to Hurdle/Shurf without a dedicated audit + test pass. See also D-08, D-24, the D-17 caveat, and ADR-003's ShurfModel interim rule. |
 
 ---
 

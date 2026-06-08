@@ -18,7 +18,7 @@
 - **Gate G1 (pre-flight `03` §D green):** `status` may now call the program ready.
 
 ## Phase 2 — EXP-01: offline transform pre-screen
-- [ ] `preregister` EXP-01 (log1p vs asinh vs identity; falsifiers + thresholds)
+- [x] `preregister` EXP-01 → `05_preanalysis_exp01.md` (identity/log1p/asinh/Tweedie; F1–F5; multi-component readout)
 - [ ] Execute offline readout (outside this skill) → `log` (incl. negatives)
 - **Decision D2:** which transform(s) beat the all-zeros baseline and approach gold; drop the rest.
 

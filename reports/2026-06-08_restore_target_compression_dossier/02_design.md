@@ -26,7 +26,11 @@ For each stepshifter model family, **which `target_transform` ∈ {`identity`, `
 2. **Validate on the real pipeline** for the surviving transform(s) on a small set of representative `big_chungus` models (one per family: Hurdle, flat XGB/LGBM/RF).
 3. **Decide per family** and record; feed the choice into the views-models config migration (#111) and a proposed ADR.
 
-## Widened scope (expert-method-review, 2026-06-08)
+## Scope decision (2026-06-08)
+
+**Prove the fix on PLAIN models first.** In scope: `StepshifterModel` regressors (XGB / XGBRF / LGBM); transforms **`identity` / `log1p` / `asinh`** only (stateless — no cached statistics). **Out of scope / deferred ("here be dragons", register D-26):** `HurdleModel`, `ShurfModel` (they carry their own scattered transforms + a latent bug — separate audit+test pass needed), **Tweedie / count-likelihoods** (a future option, not a current gap — D-23), and normalization (would need cached stats). No patches or back-and-forth transforms: the transform infrastructure (transform-once / invert-once, declared in config, nothing in between) must be built, audited, and tested as critical infrastructure **before** experiments are trusted.
+
+## Widened scope (expert-method-review, 2026-06-08) — bounded by the scope decision above
 
 The original framing — *"which transform best restores cm MSLE"* — pre-commits to (a) transforms of a squared-error regressor and (b) a single scale-dependent metric, so it cannot discover a better model and can reward tail-compression that hurts the policy-relevant cases. Amendments (→ risk register D-22–D-25):
 

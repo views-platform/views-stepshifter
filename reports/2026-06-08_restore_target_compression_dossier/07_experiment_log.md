@@ -15,6 +15,8 @@ Entry template (from the skill):
 
 ---
 
-*(No experiments logged yet. EXP-01 is gated behind Phase-1 pre-flight — see `04_roadmap.md` / `03 §D`.)*
+*(No experiments logged yet.)*
+
+**Pending:** EXP-01 is **pre-registered** (`05_preanalysis_exp01.md`, 2026-06-08) and **awaiting execution** on real brown_cheese data. Log its outcome here via `/rnd-dossier log` once run — including a negative if any falsifier (F1–F5) fires.
 
 > Note: the synthetic reproduction in `reports/investigation_metrics_08062026/FINDINGS.md` (raw 4.79 vs log1p 1.66 vs zeros 2.16) is **diagnostic evidence**, not a pre-registered experiment of this dossier. It motivates EXP-01; it does not substitute for it (synthetic data, not real models vs the gold standard).

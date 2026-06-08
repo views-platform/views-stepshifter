@@ -47,7 +47,8 @@ See `03_harness_and_invariants.md`. Summary: **~60–70% of the standing harness
 - [ ] **Fetch prior art** (`01`): fatalities002 retrospective PDF + model appendix (have locally), Hegre et al. 2020/2022, transform/zero-inflation literature → via `library` skill
 - [ ] **`expert-method-review` on `02_design`** (the transform-choice design) before pre-registering
 - [ ] **Close pre-flight blockers** (`03` §D): build the fast offline readout; secure real cached queryset data for ≥1 representative model; lock the eval protocol
-- [ ] **`preregister`** EXP-01 (log1p vs asinh vs identity on one model; cm MSLE vs gold + baselines)
+- [x] **`preregister`** EXP-01 → `05_preanalysis_exp01.md` (identity/log1p/asinh/Tweedie on real brown_cheese data; multi-component readout; F1–F5)
+- [ ] **Execute EXP-01** on brown_cheese real data → `/rnd-dossier log` (incl. negatives). Real env confirmed runnable (`views_pipeline` conda)
 - [ ] *(execute — outside this skill)* → `log` → `status` → `promote`
 
 ## 6. Conventions
