@@ -1,6 +1,8 @@
 # Dossier: Restore Stepshifter Target Compression
 
-**Status:** `init` complete — harness audited, gaps flagged. **Not yet ready to run** (pre-flight checklist red).
+**Status:** EXP-01 executed + logged (2026-06-08). **Diagnosis CONFIRMED** (identity reproduces production 4.27); **naive transform fix FALSIFIED** (F4 fired — compression wins MSLE but ~2.5× worse on the escalation tail). Program re-scoped toward **tail-aware fixes** before any production flip.
+
+**Forensic reconstruction (2026-06-09 → `08_forensic_what_happened.md`, report-ready):** the `big_chungus` breakage is **narrow** — only the **plain** constituents broke (raw target, MSLE 4–5); the **Hurdle** (0.79–1.08) and **deep-learning** (0.43–0.57) constituents were **healthy all along**, per the report's own per-constituent leaderboard. The original FINDINGS over-claimed "all 19 broken." Hurdle health corroborated twice (June report fast_car 0.847 ≈ fresh run 0.784). Open distinct bug: ShurfModel `log_target` ordering (`shurf_model.py:210-212`).
 **Created:** 2026-06-08 · **Branch:** `investigation/raw-target-space-io`
 
 ---
@@ -47,9 +49,10 @@ See `03_harness_and_invariants.md`. Summary: **~60–70% of the standing harness
 - [ ] **Fetch prior art** (`01`): fatalities002 retrospective PDF + model appendix (have locally), Hegre et al. 2020/2022, transform/zero-inflation literature → via `library` skill
 - [ ] **`expert-method-review` on `02_design`** (the transform-choice design) before pre-registering
 - [ ] **Close pre-flight blockers** (`03` §D): build the fast offline readout; secure real cached queryset data for ≥1 representative model; lock the eval protocol
-- [x] **`preregister`** EXP-01 → `05_preanalysis_exp01.md` (identity/log1p/asinh/Tweedie on real brown_cheese data; multi-component readout; F1–F5)
-- [ ] **Execute EXP-01** on brown_cheese real data → `/rnd-dossier log` (incl. negatives). Real env confirmed runnable (`views_pipeline` conda)
-- [ ] *(execute — outside this skill)* → `log` → `status` → `promote`
+- [x] **`preregister`** EXP-01 → `05_preanalysis_exp01.md` (identity/log1p/asinh; multi-component readout; F1–F4)
+- [x] **Execute EXP-01** on real brown_cheese through the **real mechanism** (#52) → logged `07_experiment_log.md` (2026-06-08)
+- [x] **`log` EXP-01** — **MIXED: diagnosis CONFIRMED (F3 identity=4.269≈4.27), naive-transform fix FALSIFIED (F4 fired — compression ~2.5× worse on the escalation tail, calibration collapses to ~¼)**
+- [ ] **NEXT — EXP-02 / design review on tail-aware fixes** *before* any production flip (views-models#114): tail/quantile selection metric (D-22), the deferred Hurdle two-stage, or a count likelihood (D-23). log1p > asinh if a transform is used at all.
 
 ## 6. Conventions
 

@@ -354,3 +354,34 @@ def test_hurdle_model_rejects_nonidentity_transform(t):
 def test_shurf_model_rejects_nonidentity_transform(t):
     with pytest.raises(ValueError, match="identity"):
         ShurfModel(_shurf_model_cfg(t), _PARTS)
+
+
+def test_hurdle_identity_fit_predict_produces_sane_raw_output():
+    """Real (non-mocked) end-to-end robustness lock for the deferred Hurdle path:
+    a HurdleModel with identity fits and predicts, and the binary x positive
+    composition yields finite, sanely-scaled raw output. Complements the existing
+    mocked fit/predict tests (which are GPU-branch brittle, D-13)."""
+    idx = pd.MultiIndex.from_product(
+        [range(21), range(3)], names=["month_id", "country_id"]
+    )
+    df = pd.DataFrame(
+        {"f1": np.arange(63, dtype=float), "t": np.array([0.0, 1.0, 5.0] * 21)},
+        index=idx,
+    )
+    cfg = {
+        "steps": [1, 2],
+        "targets": ["t"],
+        "parameters": {"clf": {"n_estimators": 5}, "reg": {"n_estimators": 5}},
+        "sweep": False,
+        "target_transform": "identity",
+        "model_clf": "LGBMClassifier",
+        "model_reg": "LGBMRegressor",
+    }
+    m = HurdleModel(cfg, {"train": [0, 10], "test": [11, 20]})
+    m.fit(df)
+    out = m.predict("forecasting")
+    col = "pred_t"
+    vals = out[col].to_numpy()
+    assert len(vals) > 0
+    assert np.isfinite(vals).all()
+    assert np.nanmax(np.abs(vals)) < 1e6  # sane raw scale, not exploded/log-space
