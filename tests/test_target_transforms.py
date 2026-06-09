@@ -385,3 +385,55 @@ def test_hurdle_identity_fit_predict_produces_sane_raw_output():
     assert len(vals) > 0
     assert np.isfinite(vals).all()
     assert np.nanmax(np.abs(vals)) < 1e6  # sane raw scale, not exploded/log-space
+
+
+# -----------------------------------------------------------------------
+# Red Team — ShurfModel log_target=True is broken (D-27): it is identity-pinned
+# (raw target), so the log_target=True sampler applies expm1 to a raw prediction
+# -> float64 overflow -> inf. The gate must reject it (use log_target=False;
+# re-enabling a safe log-space path is deferred, #71).
+# -----------------------------------------------------------------------
+
+def test_gate_rejects_shurf_with_log_target_true():
+    with pytest.raises(MissingHyperparameterError, match="log_target"):
+        _audit(_shurf_config(log_target=True))
+
+
+def test_gate_accepts_shurf_with_log_target_false():
+    _audit(_shurf_config(log_target=False))
+
+
+def test_shurf_log_target_false_predict_is_finite_no_overflow():
+    """End-to-end: a log_target=False Shurf produces FINITE raw-space samples (no
+    expm1 overflow) and guards the dead-code removal in predict_sequence. The broken
+    log_target=True path is gate-rejected (tested separately)."""
+    idx = pd.MultiIndex.from_product(
+        [range(21), range(3)], names=["month_id", "country_id"]
+    )
+    df = pd.DataFrame(
+        {"f1": np.arange(63, dtype=float), "t": np.array([0.0, 1.0, 5.0] * 21)},
+        index=idx,
+    )
+    cfg = {
+        "steps": [1, 2],
+        "targets": ["t"],
+        "parameters": {"clf": {"n_estimators": 2}, "reg": {"n_estimators": 2}},
+        "sweep": False,
+        "target_transform": "identity",
+        "model_clf": "LGBMClassifier",
+        "model_reg": "LGBMRegressor",
+        "submodels_to_train": 1,
+        "pred_samples": 2,
+        "log_target": False,
+        "draw_dist": "Lognormal",
+        "draw_sigma": 0.5,
+    }
+    m = ShurfModel(cfg, {"train": [0, 10], "test": [11, 20]})
+    m.fit(df)
+    out = m.predict("forecasting")
+    vals = np.concatenate(
+        [np.asarray(v, dtype=float).ravel() for v in out["pred_t"]]
+    )
+    assert vals.size > 0
+    assert np.isfinite(vals).all()   # the point: no inf from expm1 overflow
+    assert np.nanmax(vals) < 1e6     # sane raw scale, not exploded

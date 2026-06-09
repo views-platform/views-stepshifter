@@ -187,3 +187,18 @@ class ReproducibilityGate:
                 )
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
+
+            # 7. ShurfModel log_target rule (D-27): ShurfModel is identity-pinned, so the
+            #    positive stage trains on the RAW target; the log_target=True sampler then
+            #    applies expm1 to that raw prediction -> float64 overflow -> inf. Require
+            #    log_target=False (the correct raw sampler). Re-enabling a safe log-space
+            #    sampling path is deferred (#71 / the ADR-003 split).
+            if algo == "ShurfModel" and config.get("log_target") is True:
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    "ShurfModel must declare log_target=False — with the raw target, "
+                    "log_target=True overflows expm1 (D-27). Re-enabling a safe "
+                    "log-space sampling path is deferred (#71)."
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
