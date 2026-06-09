@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-08
+**Last updated:** 2026-06-09
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 22
-**Concerns:** Open 19 | Resolved 1 | Invalidated 2
+**Total entries:** 23
+**Concerns:** Open 20 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -255,6 +255,19 @@
 | **Status** | Open (deliberately deferred) |
 | **Location** | `views_stepshifter/models/shurf_model.py:156,180,212,214` (internal `log1p`/`expm1` + dormant `log_target=True` bug); `views_stepshifter/models/hurdle_model.py` (two-stage binary split); `views_stepshifter/manager/stepshifter_manager.py:39-47` (the standardize→0 clamp, D-16) |
 | **Notes** | **Decision:** prove the transform-centralization and the over-prediction fix on **plain** stepshifter models (XGB/XGBRF/LGBM via `StepshifterModel` base) **FIRST**. `HurdleModel` and `ShurfModel` are **explicitly out of scope for now** — they carry their *own* scattered transforms (ShurfModel does `log1p`/`expm1` inside `predict_sequence`, with a dormant `log_target=True` bug; Hurdle has the binary `(x>0)` stage) that need careful, separately-tested centralization. **Significant work — here be dragons.** The plain-model proof must **not** be assumed to generalize to them, and must not be extended to Hurdle/Shurf without a dedicated audit + test pass. See also D-08, D-24, the D-17 caveat, and ADR-003's ShurfModel interim rule. |
+
+---
+
+### D-27 — ShurfModel `log_target=True` applies `expm1` to a raw-space prediction → silent order-of-magnitude inflation
+
+| Field | Value |
+|---|---|
+| **Tier** | 1 |
+| **Trigger** | Any calibration/forecast run of a `log_target=True` ShurfModel after the queryset `.ln()` / internal `log1p` removal (`08ee2eb`). Currently exactly one exposed model: `fourtieth_symphony` (cm, `log_target=True`); the other 5 Shurfs are `log_target=False` and unaffected. |
+| **Source** | expert-code-review (2026-06-09), grounded by reading `ShurfModel.fit` + `predict_sequence` |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/shurf_model.py:38` (`fit` → `_process_data`, identity-pinned → **raw** target) + `:65-68` (positive regressor trains on raw positive counts) ↔ `:156` (the `log_target=True` Lognormal sampler does `expm1(np.random.normal(Regression, σ))` on that raw prediction) |
+| **Notes** | **Training-space ↔ sampling-space mismatch.** `ShurfModel.fit` trains the positive stage on the **raw** target (`_process_data` is identity for Shurf — both by the gate-pin and historically post-`08ee2eb`). But the `log_target=True` sampler assumes `Regression` is **log**-space and applies `expm1`: `expm1` of a raw conflict count (e.g. 10 → ~22026) → **catastrophic over-prediction, with no error signal**. `fourtieth_symphony` is a published model silently emitting inflated forecasts. **Same root cause as D-17** (removed compression → raw-space model) but a **distinct manifestation** (sampler `expm1`-of-raw inflation vs the plain models' raw over-prediction on zeros). **Corrects the investigation FINDINGS:** the claimed site (`shurf_model.py:210-212` ordering) is **dead code** — the `"Prediction"` column it mutates is dropped at `:216-227`; the output uses `pred_col_name` set at `:206`. Diagnosis: views-stepshifter#68; fix: #69 (test-first; candidates: config `log_target=False` onto the correct raw sampler at `:180`, a code fix, or fold into the #71 ADR-003 split). Cross-ref **D-17** (shared root cause), **D-26** / **D-08** (Shurf deferred + mutable-dict bug), ADR-003 ShurfModel interim rule. |
 
 ---
 
