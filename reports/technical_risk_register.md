@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-10
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 23
-**Concerns:** Open 20 | Resolved 1 | Invalidated 2
+**Total entries:** 26
+**Concerns:** Open 23 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -268,6 +268,45 @@
 | **Status** | Open |
 | **Location** | `views_stepshifter/models/shurf_model.py:38` (`fit` → `_process_data`, identity-pinned → **raw** target) + `:65-68` (positive regressor trains on raw positive counts) ↔ `:156` (the `log_target=True` Lognormal sampler does `expm1(np.random.normal(Regression, σ))` on that raw prediction) |
 | **Notes** | **Training-space ↔ sampling-space mismatch.** `ShurfModel.fit` trains the positive stage on the **raw** target (`_process_data` is identity for Shurf — both by the gate-pin and historically post-`08ee2eb`). But the `log_target=True` sampler assumes `Regression` is **log**-space and applies `expm1`: `expm1` of a raw conflict count (e.g. 10 → ~22026) → **catastrophic over-prediction, with no error signal**. `fourtieth_symphony` is a published model silently emitting inflated forecasts. **Same root cause as D-17** (removed compression → raw-space model) but a **distinct manifestation** (sampler `expm1`-of-raw inflation vs the plain models' raw over-prediction on zeros). **Corrects the investigation FINDINGS:** the claimed site (`shurf_model.py:210-212` ordering) is **dead code** — the `"Prediction"` column it mutates is dropped at `:216-227`; the output uses `pred_col_name` set at `:206`. Diagnosis: views-stepshifter#68; fix: #69 (test-first; candidates: config `log_target=False` onto the correct raw sampler at `:180`, a code fix, or fold into the #71 ADR-003 split). Cross-ref **D-17** (shared root cause), **D-26** / **D-08** (Shurf deferred + mutable-dict bug), ADR-003 ShurfModel interim rule. |
+
+---
+
+### D-28 — Stepshifter ensembles train constituents against the *published* (unfixed) views-stepshifter → `target_transform`/`log1p` silently not applied → raw training
+
+| Field | Value |
+|---|---|
+| **Tier** | 1 |
+| **Trigger** | Running any stepshifter ensemble (`chunky_bunny` / `pink_ponyclub`) with `--train` (first-time constituent training) **before** the `target_transform` fix is merged to main and released to a version satisfying the constituents' `views-stepshifter>=1.0.0,<2.0.0` pin. |
+| **Source** | falsify (2026-06-09) |
+| **Status** | Open |
+| **Location** | views-models `models/*/run.sh` (`env_path=.../envs/views_stepshifter`) + `models/*/requirements.txt` (`views-stepshifter>=1.0.0,<2.0.0`); views-pipeline-core `managers/ensemble/ensemble.py:403-416` (`_train_model_artifact` → `_execute_shell_script` → run.sh) + `cli/args.py:429` (`to_shell_command` default `script_name="run.sh"`); fix on views-stepshifter `experiment/exp01_target_transform` (unmerged — `origin/main` gate has **0** `target_transform` occurrences) |
+| **Notes** | The `EnsembleManager` trains each constituent by **subprocessing that model's `run.sh`**, which activates a **per-model conda env** that pip-installs the **published** `views-stepshifter` (1.x) — which has **no `target_transform` mechanism**. The config's `target_transform: "log1p"` is therefore **silently ignored**; the constituent trains on the **raw** target (the exact D-17/#114 bug), with no error signal. The entire `log1p` validation this session (`car_radio`/`bittersweet_symphony`/`counting_stars` cm MSLE ~0.41) was performed in the `views_pipeline` env (editable install of the fixed branch) — **a different env than the ensemble's execution path** — giving false confidence. Same observable failure as **D-17** (raw/mis-scaled predictions) but a **distinct root cause**: an *unreleased-fix + published-env execution path*, not frozen artifacts. The fix is not actually "applied" to an ensemble run until it is **released** (issue #55) or the per-model envs are provisioned with the fixed code. Cross-ref **D-17**, **D-14** (version/build drift), **D-20** (ensemble path unaudited), **D-29** (envs absent); issues #55 (release), #114 (config flip). |
+
+---
+
+### D-29 — Per-model conda envs the ensemble invokes don't exist → on-the-fly creation from published reqs + 2 h/constituent timeout
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | Running a stepshifter/DL ensemble (`chunky_bunny` / `pink_ponyclub`) for the first time on a box where `envs/views_stepshifter` and `envs/views_r2darts2` are absent. |
+| **Source** | falsify (2026-06-09) |
+| **Status** | Open |
+| **Location** | views-models `envs/` (only `views-baseline`/`views_ensemble`/`views-hydranet` present — **no `views_stepshifter`, no `views_r2darts2`**); `models/*/run.sh` (creates env via `conda create` + `pip install -r requirements.txt` when absent); views-pipeline-core `ensemble.py` `_execute_shell_script` (`subprocess.run(..., check=True, timeout=7200)`) |
+| **Notes** | The ensemble runs each of the 23 constituents via `run.sh` in its **own** env. The plain/Hurdle env `views_stepshifter` and the DL env `views_r2darts2` (TSMixer/NBEATS/NHiTS/TiDE) are **not present**, so first run would build them from scratch (conda create + pip) — slow, network-dependent, and prone to dependency-resolution failure. Additionally `_execute_shell_script` enforces a **7200 s (2 h) per-constituent timeout**; DL-constituent training may exceed it → `PipelineException` aborts the entire ensemble run. Cross-ref **D-28** (the freshly-created env also lacks the fix). |
+
+---
+
+### D-30 — No fail-loud guard on DL prediction magnitude / inverse-transform overflow → a diverged deep-learning constituent silently emits inflated forecasts that corrupt an ensemble
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Trigger** | Any deep-learning (r2darts2) constituent that diverges during training (e.g. under a shifted/extended partition — as the +12-month bump triggered for NHiTS/`revolving_door`): its `sinh`-inverse outputs explode, the pipeline writes predictions and generates a **clean report with no error**, and a mean-aggregating ensemble that includes it is silently obliterated. |
+| **Source** | review-diff of dossier 09 (2026-06-10), from the chunky_bunny re-run + the `revolving_door`/NHiTS investigation |
+| **Status** | Open (latent — the specific instance is resolved; the guard gap is not) |
+| **Location** | views-r2darts2 `darts_forecaster` inverse-transform (`AsinhTransform`→`sinh`) on model outputs; surfaced via `models/revolving_door` (NHiTSModel). No magnitude/range check in the r2darts2 predict path, nor in views-pipeline-core before constituent predictions are persisted and aggregated by `EnsembleManager` (mean). |
+| **Notes** | **Same class as D-27** (ShurfModel `log_target=True` `expm1`-of-raw inflation — silent inverse-transform output explosion, no error signal) but a **distinct stack**: the deep-learning r2darts2 path, not stepshifter. Observed: `revolving_door`/NHiTS diverged to **y_hat_bar 1.0e21 then 1.2e23** (MSLE 67 / 1647) across runs; each produced 13 prediction files and a clean HTML report — **only a human noticing the MSLE/y_hat_bar caught it**. A mean ensemble including it ≈ 4e19. **Fail-loud asymmetry worth flagging:** bad **input** data IS gated (viewser drift-detection `InputGate` fail-loud-caught `yellow_submarine`'s absent IMF data), but bad **output** (10²¹ predictions) is **not** — no guard on prediction magnitude / inverse-transform range. The specific instance was **resolved** by the r2darts2 update + r7/r8 tuning (RevIN + SpotlightLossLogcosh), so nothing is live-corrupting now; the **guard gap remains** and any future DL divergence recurs silently. Mitigation: a fail-loud magnitude/range check on constituent predictions (and/or the inverse-transform output) before persist/aggregate, plus an ensemble-side sanity gate on constituent `y_hat_bar`. Cross-ref **D-27** (same class), **D-20** (ensemble aggregation unaudited), **D-25** (retransformation-bias). Documented in dossier `09_chunky_bunny_rerun_log.md`. |
 
 ---
 
