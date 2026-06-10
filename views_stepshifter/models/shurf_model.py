@@ -205,14 +205,12 @@ class ShurfModel(HurdleModel):
         pred_col_name = "pred_" + self._targets
         final_preds_full[pred_col_name] = final_preds_full["Prediction"]
 
-        # Log-transforming the final predictions if the target is log-transformed, exponentiating if not, 
-        # and adding a column with the log-transformed predictions
-        if self._log_target:
-            final_preds_full["LogPrediction"] = final_preds_full["Prediction"]
-            final_preds_full["Prediction"] = np.expm1(final_preds_full["Prediction"])
-        if not self._log_target:
-            final_preds_full["LogPrediction"] = np.log1p(final_preds_full["Prediction"])
-
+        # NOTE: `pred_col_name` (above) is the raw-space output — the per-submodel
+        # samples are already drawn back to raw in predict_sequence. The former
+        # log_target output-scale block here was DEAD CODE (it mutated `Prediction`/
+        # `LogPrediction`, both dropped below) and additionally overflowed `expm1` on
+        # the raw prediction for log_target=True (D-27). Removed; log_target=True is
+        # now gate-rejected. Re-enabling a safe log-space path is deferred (#71).
         final_preds_full.drop(
             columns=[
                 "Classification",
@@ -221,7 +219,6 @@ class ShurfModel(HurdleModel):
                 "RegressionSample",
                 "submodel",
                 "Prediction",
-                "LogPrediction",
             ],
             inplace=True,
         )

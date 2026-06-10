@@ -29,6 +29,7 @@ def test_audit_manifest_accepts_valid_xgb_config():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100, "n_jobs": 4},
     }
     ReproducibilityGate.Config.audit_manifest(config)
@@ -39,6 +40,7 @@ def test_audit_manifest_accepts_valid_hurdle_config():
         "algorithm": "HurdleModel",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {
             "clf": {"n_estimators": 100},
             "reg": {"n_estimators": 100},
@@ -52,6 +54,7 @@ def test_audit_manifest_accepts_valid_shurf_config():
         "algorithm": "ShurfModel",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "submodels_to_train": 50,
         "pred_samples": 10,
         "log_target": False,
@@ -69,6 +72,7 @@ def test_audit_manifest_rejects_missing_core_key():
     config = {
         "algorithm": "XGBRegressor",
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100, "n_jobs": 4},
         # "steps" is missing
     }
@@ -81,6 +85,7 @@ def test_audit_manifest_rejects_missing_parameter_key():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100},
         # "n_jobs" missing from parameters
     }
@@ -93,6 +98,7 @@ def test_audit_manifest_rejects_missing_shurf_config_key():
         "algorithm": "ShurfModel",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "submodels_to_train": 50,
         # missing pred_samples, log_target, draw_dist, draw_sigma
         "parameters": {
@@ -109,6 +115,7 @@ def test_audit_manifest_rejects_unknown_algorithm():
         "algorithm": "NonExistentModel",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {},
     }
     with pytest.raises(MissingHyperparameterError, match="NonExistentModel"):
@@ -203,6 +210,7 @@ def test_none_value_injection():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": None,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100, "n_jobs": 4},
     }
     with pytest.raises(MissingHyperparameterError, match="None"):
@@ -215,6 +223,7 @@ def test_none_parameter_value_rejected():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100, "n_jobs": None},
     }
     with pytest.raises(MissingHyperparameterError, match="None"):
@@ -227,6 +236,7 @@ def test_empty_string_algorithm():
         "algorithm": "",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {},
     }
     with pytest.raises(MissingHyperparameterError, match="Unknown algorithm"):
@@ -238,6 +248,7 @@ def test_missing_algorithm_key():
     config = {
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {},
     }
     with pytest.raises(MissingHyperparameterError, match="algorithm"):
@@ -250,6 +261,7 @@ def test_extra_keys_ignored():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": {"n_estimators": 100, "n_jobs": 4, "extra": True},
         "totally_unknown_key": "should be fine",
     }
@@ -262,6 +274,7 @@ def test_parameters_dict_none_rejected():
         "algorithm": "XGBRegressor",
         "steps": [*range(1, 37)],
         "time_steps": 36,
+        "target_transform": "identity",
         "parameters": None,
     }
     with pytest.raises(MissingHyperparameterError, match="None"):

@@ -217,6 +217,7 @@ def test_get_model(stepshifter_manager, stepshifter_manager_hurdle, mock_partiti
         non_hurdle_args["steps"] = [1, 2, 3]
         non_hurdle_args["time_steps"] = 3
         non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
+        non_hurdle_args["target_transform"] = "identity"
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._get_model(mock_partitioner_dict)
@@ -244,6 +245,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         non_hurdle_args["steps"] = [1, 2, 3]
         non_hurdle_args["time_steps"] = 3
         non_hurdle_args["parameters"] = {"n_estimators": 100, "n_jobs": 4}
+        non_hurdle_args["target_transform"] = "identity"
         stepshifter_manager.configs = non_hurdle_args
 
         stepshifter_manager._train_model_artifact()
@@ -267,6 +269,7 @@ def test_train_model_artifact(stepshifter_manager, stepshifter_manager_hurdle):
         hurdle_args["steps"] = [1, 2, 3]
         hurdle_args["time_steps"] = 3
         hurdle_args["parameters"] = {"clf": {"n_estimators": 100}, "reg": {"n_estimators": 100}}
+        hurdle_args["target_transform"] = "identity"
         stepshifter_manager_hurdle.configs = hurdle_args
         stepshifter_manager_hurdle._is_hurdle = True
 
