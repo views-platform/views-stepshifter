@@ -1,6 +1,7 @@
 import logging
 
 from .exceptions import MissingHyperparameterError
+from .transforms import TRANSFORMS
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class ReproducibilityGate:
         """Gates related to configuration and hyperparameter integrity."""
 
         # Core keys required by ALL stepshifter models regardless of algorithm.
-        CORE_GENOME = ["steps", "time_steps", "parameters"]
+        CORE_GENOME = ["steps", "time_steps", "parameters", "target_transform"]
 
         # Algorithm-specific requirements.
         # Each entry maps to a dict with:
@@ -159,6 +160,45 @@ class ReproducibilityGate:
                     "REPRODUCIBILITY CONTRACT VIOLATED: "
                     f"Mandatory parameters set to None: {explicit_nones}. "
                     "Implicit defaults are forbidden."
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
+
+            # 5. Validate target_transform against the closed registry.
+            #    (Presence and non-None are already guaranteed by CORE_GENOME above.)
+            target_transform = config["target_transform"]
+            if target_transform not in TRANSFORMS:
+                available = list(TRANSFORMS.keys())
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    f"Unknown target_transform '{target_transform}'. "
+                    f"Available: {available}"
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
+
+            # 6. Deferred-models rule (D-26): HurdleModel/ShurfModel carry their own
+            #    scattered transforms; they must train in raw space (identity) for now.
+            if algo in ("HurdleModel", "ShurfModel") and target_transform != "identity":
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    f"{algo} must declare target_transform='identity' "
+                    "(non-identity target transforms are deferred for two-stage models)."
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
+
+            # 7. ShurfModel log_target rule (D-27): ShurfModel is identity-pinned, so the
+            #    positive stage trains on the RAW target; the log_target=True sampler then
+            #    applies expm1 to that raw prediction -> float64 overflow -> inf. Require
+            #    log_target=False (the correct raw sampler). Re-enabling a safe log-space
+            #    sampling path is deferred (#71 / the ADR-003 split).
+            if algo == "ShurfModel" and config.get("log_target") is True:
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    "ShurfModel must declare log_target=False — with the raw target, "
+                    "log_target=True overflows expm1 (D-27). Re-enabling a safe "
+                    "log-space sampling path is deferred (#71)."
                 )
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)

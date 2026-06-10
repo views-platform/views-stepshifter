@@ -6,6 +6,7 @@ from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict
 from views_stepshifter.models.validation import views_validate
+from views_stepshifter.infrastructure.transforms import TRANSFORMS
 from views_pipeline_core.managers.model import ForecastingModelManager
 import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -30,6 +31,17 @@ class StepshifterModel:
             raise ValueError("Stepshifter only supports one dependent variable")
         else:
             self._targets = config["targets"][0]
+
+        # Declared target-space transform (ADR-003). Only the NAME is stored on the
+        # instance (and serialized with the pickled artifact); the forward/inverse
+        # callables are resolved from the registry on use (see _forward/_inverse),
+        # which keeps the model picklable (the identity transform is a lambda).
+        self._target_transform_name = config["target_transform"]
+        if self._target_transform_name not in TRANSFORMS:
+            raise ValueError(
+                f"Unknown target_transform '{self._target_transform_name}'. "
+                f"Available: {list(TRANSFORMS)}"
+            )
 
     @staticmethod
     def get_device_params():
@@ -98,6 +110,11 @@ class StepshifterModel:
 
         missing_df = pd.DataFrame(0, index=missing_combinations, columns=df.columns)
         df = pd.concat([df, missing_df]).sort_index()
+
+        # Forward target-space transform, applied exactly once at data-in (ADR-003).
+        # Target column only (features are pre-transformed at queryset level); the
+        # zero-preserving transforms keep the zero-fill above consistent.
+        df[self._targets] = self._forward(df[self._targets])
 
         return df
 
@@ -271,6 +288,16 @@ class StepshifterModel:
 
                 preds = pd.concat(preds_by_step, axis=0).sort_index()
 
+        return self._inverse_transform_predictions(preds)
+
+    def _inverse_transform_predictions(self, preds):
+        """Inverse target-space transform, applied exactly once at the model's output
+        boundary (ADR-003). Handles both the calibration list-of-frames and the single
+        forecasting frame. For identity this is a no-op."""
+        col = f"pred_{self._targets}"
+        frames = preds if isinstance(preds, list) else [preds]
+        for frame in frames:
+            frame[col] = self._inverse(frame[col])
         return preds
 
     def save(self, path: str):
@@ -292,3 +319,13 @@ class StepshifterModel:
     @property
     def targets(self):
         return self._targets
+
+    @property
+    def _forward(self):
+        """Forward target transform, resolved from the registry by the declared name."""
+        return TRANSFORMS[self._target_transform_name][0]
+
+    @property
+    def _inverse(self):
+        """Inverse target transform, resolved from the registry by the declared name."""
+        return TRANSFORMS[self._target_transform_name][1]

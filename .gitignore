@@ -212,3 +212,6 @@ cython_debug/
 
 # txt logs
 *.txt
+
+# investigation source inputs (PDF/HTML/draft md — not deliverables)
+reports/investigation_metrics_08062026/

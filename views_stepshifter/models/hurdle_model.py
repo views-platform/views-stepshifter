@@ -34,6 +34,16 @@ class HurdleModel(StepshifterModel):
 
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         super().__init__(config, partitioner_dict)
+        # Defense-in-depth (with the ReproducibilityGate): the two-stage models
+        # override predict() and apply NO inverse, so a non-identity target
+        # transform would silently emit transformed-space predictions. Deferred
+        # per risk register D-26; fail loud here too, not only at the gate.
+        if self._target_transform_name != "identity":
+            raise ValueError(
+                f"{type(self).__name__} requires target_transform='identity' "
+                "(non-identity target transforms are deferred for two-stage "
+                f"models); got '{self._target_transform_name}'."
+            )
         params = self._get_parameters(config)
         self._clf_params = params["clf"]
         self._reg_params = params["reg"]
