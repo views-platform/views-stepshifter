@@ -269,7 +269,7 @@ def test_model_is_picklable_and_preserves_transform_name():
     np.testing.assert_allclose(restored._inverse(np.array([0.0, 1.0])), np.expm1([0.0, 1.0]))
 
 
-def test_predict_routes_through_inverse_exactly_once_end_to_end():
+def test_predict_routes_through_inverse_exactly_once_end_to_end(monkeypatch):
     """A real fit -> predict('forecasting') applies the inverse exactly once at the
     output boundary (proves the inverse is wired into predict(), not only the helper)."""
     idx = pd.MultiIndex.from_product(
@@ -290,16 +290,20 @@ def test_predict_routes_through_inverse_exactly_once_end_to_end():
     m = StepshifterModel(cfg, {"train": [0, 10], "test": [11, 20]})
     m.fit(df)
 
-    seen = {"n": 0}
-    real = m._inverse_transform_predictions
+    # Spy on the CLASS, not the instance: predict() ships the model to
+    # ProcessPoolExecutor workers, and an instance-level local closure fails to
+    # pickle (CI). The inverse runs in the main process at the predict() boundary,
+    # so a class-level spy still counts it exactly once while the model stays picklable.
+    calls = []
+    original = StepshifterModel._inverse_transform_predictions
 
-    def _spy(preds):
-        seen["n"] += 1
-        return real(preds)
+    def _spy(self, preds):
+        calls.append(1)
+        return original(self, preds)
 
-    m._inverse_transform_predictions = _spy
+    monkeypatch.setattr(StepshifterModel, "_inverse_transform_predictions", _spy)
     out = m.predict("forecasting")
-    assert seen["n"] == 1
+    assert len(calls) == 1
     assert np.isfinite(out["pred_t"].to_numpy()).all()
 
 
