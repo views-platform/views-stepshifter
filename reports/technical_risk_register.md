@@ -96,9 +96,9 @@
 | **Tier** | 3 |
 | **Trigger** | When cutting a release or reproducing the environment from a fresh clone / CI run. |
 | **Source** | repo-assimilation (2026-06-08) |
-| **Status** | Open |
-| **Location** | `pyproject.toml:3` (version `1.2.0`); `dist/views_stepshifter-0.1.2*` (stale 0.1.2 wheels); `README.md:151` (lists `poetry.lock`); `.github/workflows/run_pytest.yml:33` (`poetry install`, no lockfile) |
-| **Notes** | `pyproject.toml` declares `version = "1.2.0"` while the committed `dist/` artifacts are `0.1.2`. The README "Project Structure" lists `poetry.lock`, but no lockfile exists in the repo, so CI's `poetry install` resolves dependencies unpinned on every run — a reproducibility hazard only partially mitigated by hard pins on `lightgbm` (4.6.0) and `scipy` (1.15.1). Build cruft should also not be committed. See also D-07 (related pyproject dependency hygiene). |
+| **Status** | Partially resolved (2026-06-10, 1.3.0 release prep) — version/dist drift fixed; **lockfile gap still Open** |
+| **Location** | ~~`pyproject.toml:3` (version `1.2.0`)~~ → now `1.3.0`; ~~`dist/views_stepshifter-0.1.2*`~~ → removed + `dist/` gitignored; `README.md:151` (lists `poetry.lock`); `.github/workflows/run_pytest.yml:33` (`poetry install`, no lockfile) |
+| **Notes** | `pyproject.toml` declared `version = "1.2.0"` while the committed `dist/` artifacts were `0.1.2`. The README "Project Structure" lists `poetry.lock`, but no lockfile exists in the repo, so CI's `poetry install` resolves dependencies unpinned on every run — a reproducibility hazard only partially mitigated by hard pins on `lightgbm` (4.6.0) and `scipy` (1.15.1). Build cruft should also not be committed. See also D-07 (related pyproject dependency hygiene). **Update (2026-06-10, 1.3.0 release):** the **version collision** materialised exactly as this entry warned — `1.2.0` was already a published tag (`v1.2.0` = `origin/main` `e6adbdb`, **no `target_transform`**), so the `target_transform` release could not ship as 1.2.0. Resolved by bumping `pyproject` to **1.3.0** (minor; consumers pin `<2.0.0`, all 37 views-models stepshifter configs migrated) and **removing the stale `dist/` 0.1.2 wheels** (now gitignored). The **lockfile gap remains Open** — CI still `poetry install`s unpinned; cut a `poetry.lock` or drop the README reference in a follow-up. |
 
 ---
 
