@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-13
+**Last updated:** 2026-06-14
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 34
-**Concerns:** Open 31 | Resolved 1 | Invalidated 2
+**Total entries:** 35
+**Concerns:** Open 32 | Resolved 1 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -411,6 +411,19 @@
 | **Status** | Open |
 | **Location** | `views_stepshifter/models/hurdle_model.py:94-97`, `:244-247` (product); positive-stage squared-error objective via the Darts regression models (`stepshifter.py:_resolve_reg_model`); MSLE evaluation in the pipeline (views-evaluation) |
 | **Notes** | Per Gneiting (2011) elicitability, a point forecast is meaningful only relative to the functional its loss elicits: squared error elicits the **mean**, absolute error the **median**. The positive stage minimises squared error → conditional **mean**, but the pipeline scores **MSLE** (squared error in log space → ≈ **median of the log**), a *different* functional that diverges sharply on a right-skewed positive part — so even a perfectly fit product is optimised for the wrong target relative to how it is scored, and if the binary stage emits hard labels (D-33) the product elicits **no** functional at all. This is the *mechanism* under the observed symptom in **D-22** (MSLE structurally rewards zero-fit / tail-compression). Mitigation: choose the target functional **from** the scoring rule and fit a loss consistent with it, or evaluate the full predictive distribution with a proper score (CRPS / tail-weighted variants) rather than a point product; always report calibration-in-the-large. Grounded in held library: Gneiting2007, Jordan2019, Bolin2023, Lerch2017 (Forecaster's Dilemma). *Fetch: Harrell RMS, Duan1983 (retransformation/smearing).* Cross-ref **D-22** (the symptom), **D-25** (no prediction-space calibration check), **D-33** (label gate → not even a functional), **D-37** (the conditioning mis-specification). |
+
+---
+
+### D-39 — Device-selected fit/predict path makes dev≠CI execution + a fork-after-CUDA deadlock guarded only by an import side effect
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 (recalibrate to 3 if the determinism facet is judged test-infra-only — see rationale; **not** Tier 1: the failure modes are a *loud* hang and a dev/CI divergence, not silent corruption) |
+| **Trigger** | Before relying on the `ProcessPoolExecutor` (pool) path locally, exercising it in a test, or removing/reordering the `manager/__init__.py` `set_start_method('spawn')` import — build the executor seam (inject the executor + collapse the duplicated product lines) first. |
+| **Source** | expert-review (2026-06-14) |
+| **Status** | Open — remediation = the planned executor-seam refactor |
+| **Location** | `views_stepshifter/models/stepshifter.py` (`get_device_params` → `torch.cuda.is_available()`); `views_stepshifter/models/hurdle_model.py` (predict's CUDA/CPU × eval/forecast branches — the `binary×positive` product duplicated across 4 sites); `views_stepshifter/manager/__init__.py:5` (`set_start_method('spawn')` as an import side effect); `.github/workflows/run_pytest.yml` (CI, no GPU → runs the pool path) |
+| **Notes** | One root cause, three facets (surfaced building Story B's tests, #75): **(1) determinism** — `fit`/`predict` select serial vs `ProcessPoolExecutor` by ambient hardware (`get_device_params()`), so a GPU dev box runs the *serial* path while CI (no GPU) runs the *pool* path. A test asserting on the locally-run path **cannot verify the other path in the same environment** — dev and CI execute different code. **(2) Deadlock** — the pool path defaults to `fork`; forking after CUDA is initialized **hangs** (observed: forcing the CPU path in-process during Story B deadlocked, timing out). The only thing preventing this in production/CI is `manager/__init__.py` setting `spawn` — but **only as an import side effect, and only when that package is imported first**; remove/reorder it and the hang returns. **(3) Duplicated-branch drift** — the `binary×positive` product line is copied across 4 serial/pool predict branches, so the pool branch can silently diverge from the serial branch with **no local test catching it** (the serial branch is all a GPU dev box runs). **Tier rationale:** structural fragility with a concrete, realistic trigger (any contributor testing/running the pool path, or cleaning up the spawn-import) → Tier 2; it is **not** silent model-output corruption (→ not Tier 1), and a reviewer who scopes the determinism facet as test-infrastructure-only could argue Tier 3 (peer: D-36 pool fragility is Tier 3). **Mitigation (planned seam refactor):** collapse the 4 product lines into one method; inject the executor (serial vs pool) so both run in-process under test; make `spawn` **explicit at pool creation**, not an import side effect. Cross-ref **D-34** (predict control-flow duplication — related, distinct: maintainability vs this determinism/deadlock), **D-36** (fit pool resource/timeout — related, distinct), **D-13** (the characterization tests whose local run exposed this). |
 
 ---
 
