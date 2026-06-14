@@ -96,10 +96,14 @@ def main():
     print("== D-37 on a zero-inflated intermittent fixture ==")
     di = intermittent_df()
     print(f"[fixture] target zero-fraction={float((di['target'] == 0).mean()):.3f}")
-    mi = HurdleModel(CFG, PART); mi.fit(di); d37(mi)
+    mi = HurdleModel(CFG, PART)
+    mi.fit(di)
+    d37(mi)
 
     print("\n== D-33 on a clean two-class fixture ==")
-    mc = HurdleModel(CFG, PART); mc.fit(clean_event_df()); d33(mc)
+    mc = HurdleModel(CFG, PART)
+    mc.fit(clean_event_df())
+    d33(mc)
 
 
 if __name__ == "__main__":
