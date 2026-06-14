@@ -1,7 +1,16 @@
+"""Behavioral tests for HurdleModel (issue #75 / risk D-13).
+
+These replace the former mock-brittle `test_fit`/`test_predict` (which asserted call-wiring
+and failed env/start-method-dependently) with real fit -> predict CHARACTERIZATION tests on a
+tiny panel. They pin the *mechanism* of the `binary x positive` point estimator — which is robust
+— rather than what a tiny-data learner happens to predict (which would be flaky). Pattern follows
+`tests/test_target_transforms.py`. The current behaviour they document (a hard {0,1} gate) is the
+finding of Story A (#78); a deliberate change to a probability gate should break
+`test_binary_stage_emits_class_labels` on purpose.
+"""
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import MagicMock, patch, call
 from views_stepshifter.models.hurdle_model import HurdleModel
 
 
@@ -15,7 +24,7 @@ def sample_config():
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
         "sweep": False,
         "target_transform": "identity",
-        "metrics": ["test_metric"]
+        "metrics": ["test_metric"],
     }
 
 
@@ -32,18 +41,61 @@ def sample_dataframe():
     data = {
         "feature1": np.arange(63, dtype=np.float64),
         "feature2": np.arange(63, 126, dtype=np.float64),
-        "target": np.array(
-            [0, 1, 2] * 21, dtype=np.float64
-        ),  # Ensure some values are above the threshold
+        # country 0 -> all 0 (no-event series); countries 1,2 -> all positive
+        "target": np.array([0, 1, 2] * 21, dtype=np.float64),
     }
     return pd.DataFrame(data, index=index)
 
 
+@pytest.fixture(scope="module")
+def fitted_hurdle():
+    """A real HurdleModel fitted once on a tiny identity-space panel (reused read-only).
+
+    The fit/predict device path (serial vs ProcessPoolExecutor) is decided by the environment
+    (`get_device_params`), exactly as in production: no GPU -> the CPU/pool path CI runs;
+    a visible GPU -> the serial path. Both compute the same `binary x positive` product, so these
+    behavioural assertions hold on either. (Run `CUDA_VISIBLE_DEVICES="" pytest` to exercise the
+    CI/CPU path locally — forcing CPU in-process while CUDA is initialized deadlocks on fork.)"""
+    cfg = {
+        "steps": [1, 2],
+        "targets": ["target"],
+        "model_clf": "LGBMClassifier",
+        "model_reg": "LGBMRegressor",
+        "parameters": {"clf": {"n_estimators": 5}, "reg": {"n_estimators": 5}},
+        "sweep": False,
+        "target_transform": "identity",
+    }
+    idx = pd.MultiIndex.from_product(
+        [range(21), range(3)], names=["month_id", "country_id"]
+    )
+    df = pd.DataFrame(
+        {
+            "feature1": np.arange(63, dtype=np.float64),
+            "target": np.array([0, 1, 2] * 21, dtype=np.float64),
+        },
+        index=idx,
+    )
+    model = HurdleModel(cfg, {"train": [0, 10], "test": [11, 20]})
+    model.fit(df)
+    return model
+
+
+def _forecast_stage_frames(model):
+    """Reconstruct the (binary, positive) per-step forecast frames the product is built from.
+
+    Mirrors HurdleModel.predict('forecasting') exactly: concat of `_predict_by_step` over steps
+    for sequence 0, sorted. Deterministic given a fitted model (independent of pool ordering)."""
+    binary = pd.concat(
+        [model._predict_by_step(model._models[s][0], s, 0) for s in model._steps]
+    ).sort_index()
+    positive = pd.concat(
+        [model._predict_by_step(model._models[s][1], s, 0) for s in model._steps]
+    ).sort_index()
+    return binary, positive
+
+
 def test_initialization(sample_config, sample_partitioner_dict):
-    """
-    Test the initialization of the HurdleModel.
-    Ensure that the model initializes with the correct attributes.
-    """
+    """The model initializes with the correct attributes."""
     model = HurdleModel(sample_config, sample_partitioner_dict)
     assert model._steps == sample_config["steps"]
     assert model._targets == sample_config["targets"][0]
@@ -51,186 +103,44 @@ def test_initialization(sample_config, sample_partitioner_dict):
     assert model._reg_params == sample_config["parameters"]["reg"]
 
 
-@pytest.mark.xfail(
-    reason="D-13: mock-brittle test (asserts call-wiring, not numerical behavior); "
-    "fails env/start-method-dependently. Replace with real tests — views-stepshifter#75.",
-    strict=False,
-)
-def test_fit(sample_config, sample_partitioner_dict, sample_dataframe):
-    """
-    Test the fit method of the HurdleModel.
-    Ensure that the data is processed correctly and the models are fitted.
-    """
-    with patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_clf_model") as mock_resolve_clf_model, \
-        patch("views_stepshifter.models.hurdle_model.HurdleModel._resolve_reg_model") as mock_resolve_reg_model, \
-        patch("views_stepshifter.models.hurdle_model.as_completed") as mock_as_completed, \
-        patch("views_stepshifter.models.hurdle_model.tqdm.tqdm") as mock_tqdm, \
-        patch("views_stepshifter.models.hurdle_model.ProcessPoolExecutor") as mock_ProcessPoolExecutor:
-
-        mock_futures = {
-            MagicMock(): "mock_value"
-            for i in sample_config["steps"]
-        }
-
-        mock_executor = MagicMock()
-        mock_executor.submit.side_effect = mock_futures
-        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
-        
-        mock_as_completed.return_value = mock_futures.keys()
-
-        mock_tqdm.side_effect = lambda x, **kwargs: x
+def test_fit_trains_a_two_stage_model_per_step(fitted_hurdle):
+    """fit() produces, for every step, a (binary, positive) model pair."""
+    assert fitted_hurdle.is_fitted_ is True
+    assert set(fitted_hurdle._models) == set(fitted_hurdle._steps)
+    for step, pair in fitted_hurdle._models.items():
+        assert isinstance(pair, tuple) and len(pair) == 2, f"step {step} is not a 2-tuple"
 
 
-        model = HurdleModel(sample_config, sample_partitioner_dict)
-        model.fit(sample_dataframe)
-        assert model._clf == mock_resolve_clf_model(model._config["model_clf"])
-        assert model._reg == mock_resolve_reg_model(model._config["model_reg"])
-        mock_ProcessPoolExecutor.assert_called_once()
-        mock_tqdm.assert_called_once_with(mock_futures.keys(), desc="Fitting models for steps", total=len(mock_futures))
-        mock_as_completed.assert_called_once_with(mock_futures.keys())
-        models = {
-            sample_config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(sample_config["steps"]))
-        }
-        assert model._models == models
-        assert model.is_fitted_
+def test_binary_stage_emits_class_labels(fitted_hurdle):
+    """D-33 characterization: the binary stage outputs hard {0,1} class LABELS, not probabilities.
 
-        
-    
-        # target_binary = [
-        #     s.map(lambda x: (x > 0).astype(float)) for s in model._target_train
-        # ]
-        # target_pos, past_cov_pos = zip(
-        #     *[
-        #         (t, p)
-        #         for t, p in zip(model._target_train, model._past_cov)
-        #         if (t.values() > 0).any()
-        #     ]
-        # )
-        # for step in model._steps:
-        #     # mock_RegressionModel.assert_has_calls([
-        #     #     call(lags_past_covariates=[-step], model=model._clf),
-        #     #     call(lags_past_covariates=[-step], model=model._reg),
-        #     # ], any_order=True)
-        #     mock_RandomForestClassifierModel.assert_has_calls([
-        #         call(lags_past_covariates=[-step], model=model._clf),
-        #     ], any_order=True)
-        #     mock_RandomForest.assert_has_calls([
-        #         call(lags_past_covariates=[-step], model=model._reg),
-        #     ], any_order=True)
-        #     # mock_RegressionModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
-        #     # mock_RegressionModel(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
-        #     mock_RandomForestClassifierModel(lags_past_covariates=[-step], model=model._clf).fit.assert_any_call(target_binary, past_covariates=model._past_cov)
-        #     mock_RandomForest(lags_past_covariates=[-step], model=model._reg).fit.assert_any_call(target_pos, past_covariates=past_cov_pos)
-    
-@pytest.mark.xfail(
-    reason="D-13: mock-brittle test (asserts call-wiring, not numerical behavior); "
-    "fails env/start-method-dependently. Replace with real tests — views-stepshifter#75.",
-    strict=False,
-)
-def test_predict(sample_config, sample_partitioner_dict, sample_dataframe):
-    """
-    Test the predict method of the HurdleModel.
-    Ensure that predictions are made correctly for both stages.
-    """
-    with patch("views_stepshifter.models.hurdle_model.check_is_fitted") as mock_check_is_fitted, \
-        patch("views_stepshifter.models.hurdle_model.as_completed") as mock_as_completed, \
-        patch("views_stepshifter.models.hurdle_model.tqdm.tqdm") as mock_tqdm, \
-        patch("views_stepshifter.models.hurdle_model.ProcessPoolExecutor") as mock_ProcessPoolExecutor, \
-        patch("views_stepshifter.models.hurdle_model.ForecastingModelManager._resolve_evaluation_sequence_number") as mock_sequence_number:
-
-        
-        # the else branch
-        future = MagicMock()
-        future.result.return_value = pd.DataFrame(
-            np.random.rand(5, 1),  
-            index=pd.Index(range(5, 10)) 
-        )
-
-        mock_futures = {
-            MagicMock(): future
-            for i in range(len(sample_config["steps"])*2) 
-        }
-
-        mock_executor = MagicMock()
-        mock_executor.submit.side_effect = mock_futures 
-        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
-
-        mock_as_completed.return_value = mock_futures.values()
-
-        mock_tqdm.side_effect = lambda x, **kwargs: x
+    This pins current behaviour. A deliberate switch to a probability gate must break this test."""
+    binary, _ = _forecast_stage_frames(fitted_hurdle)
+    vals = binary.iloc[:, 0].to_numpy()
+    assert np.array_equal(vals, np.round(vals)), "binary stage is not integral (probabilities leaked?)"
+    assert set(np.unique(vals)).issubset({0.0, 1.0})
 
 
-        model = HurdleModel(sample_config, sample_partitioner_dict)
-        model._models = {
-            sample_config["steps"][i]: list(mock_futures.keys())[i].result() for i in range(len(sample_config["steps"]))
-        }
-        predictions = model.predict(run_type="forecasting") 
-
-        assert mock_check_is_fitted.call_count == 1
-        assert mock_ProcessPoolExecutor.call_count == 1
-        mock_tqdm_expected_calls = [call(mock_futures.values(), desc='Predicting binary outcomes', total=len(sample_config['steps'])), call(mock_futures.values(), desc='Predicting positive outcomes', total=len(sample_config['steps']))]
-        for i in range(2):
-            assert repr(mock_tqdm.call_args_list[i]) == repr(mock_tqdm_expected_calls[i])
-        assert mock_as_completed.call_count == 2
-        assert not predictions.empty
+def test_point_forecast_is_binary_times_positive(fitted_hurdle):
+    """The forecasting point prediction equals the element-wise product of the two stages."""
+    out = fitted_hurdle.predict("forecasting")
+    binary, positive = _forecast_stage_frames(fitted_hurdle)
+    expected = binary.iloc[:, 0] * positive.iloc[:, 0]
+    assert out.index.equals(expected.index)
+    assert np.allclose(out["pred_target"].to_numpy(), expected.to_numpy())
 
 
-        # reset mocks
-        mock_check_is_fitted.reset_mock()
-        mock_ProcessPoolExecutor.reset_mock()
-        mock_tqdm.reset_mock()
-        mock_as_completed.reset_mock()
-
-
-        # the if branch
-        mock_sequence_number.return_value = 12
-        mock_futures2 = {
-            MagicMock(): "mock_value"
-            for i in range(mock_sequence_number.return_value)
-        }
-        mock_executor = MagicMock()
-        mock_executor.submit.side_effect = mock_futures2 
-        mock_ProcessPoolExecutor.return_value.__enter__.return_value = mock_executor
-
-        mock_as_completed.return_value = mock_futures2.keys()
-
-        
-        predictions2 = model.predict(run_type="test_run") 
-
-        assert mock_check_is_fitted.call_count == 1
-        assert mock_sequence_number.call_count == 2
-        assert mock_ProcessPoolExecutor.call_count == 1
-        mock_tqdm.assert_called_once_with(mock_futures2.keys(), desc="Predicting for sequence number", total=len(mock_futures2))
-        mock_as_completed.assert_called_once_with(mock_futures2.keys())
-        assert len(predictions2) != 0
-
-
-
-# Idk about this one
-
-# def test_threshold(sample_config, sample_partitioner_dict, sample_dataframe):
-#     """
-#     Test the threshold handling in the HurdleModel.
-#     Ensure that the threshold is applied correctly in the binary stage.
-#     """
-#     sample_config["threshold"] = 0.5
-#     model = HurdleModel(sample_config, sample_partitioner_dict)
-#     model._resolve_estimator = MagicMock(return_value=MagicMock())
-#     model.fit(sample_dataframe)
-#     predictions = model.predict(sample_dataframe, run_type="forecasting")
-    
-#     # Ensure that the threshold is applied correctly
-#     print(predictions)
-#     binary_predictions = predictions["step_combined"] > 0.5
-#     print(binary_predictions)
-#     assert binary_predictions.all(), f"Some predictions are not above the threshold: {binary_predictions}"
+def test_point_forecast_is_finite_nonnegative_raw_scale(fitted_hurdle):
+    """Predictions are finite, non-negative, and on a sane raw scale (not exploded/log-space)."""
+    v = fitted_hurdle.predict("forecasting")["pred_target"].to_numpy()
+    assert v.size > 0
+    assert np.isfinite(v).all()
+    assert (v >= 0).all()
+    assert np.nanmax(v) < 1e6
 
 
 def test_save(sample_config, sample_partitioner_dict, tmp_path, sample_dataframe):
-    """
-    Test the save method of the HurdleModel.
-    Ensure that the model is saved correctly and can be loaded.
-    """
+    """The model is saved correctly to disk."""
     model = HurdleModel(sample_config, sample_partitioner_dict)
     model.fit(sample_dataframe)
     save_path = tmp_path / "model.pkl"
