@@ -5,7 +5,8 @@ model's observed actuals (lr_ged_sb) on (month_id, country_id) over months 457-4
   - missed-escalation rate = mean(pred < 0.5 | obs > tau) for tau in {1,10,25,100} (+ pred==0 exactly)
   - tail error: MSLE & MAE on obs > tau
   - calibration by observed magnitude bucket
-Controls: car_radio (plain log1p) + an all-zeros baseline; matched-feature XGB-vs-LGBM pairs.
+Reference rows printed alongside: car_radio (plain log1p) + an all-zeros baseline. The matched-feature
+XGB-vs-LGBM confound check (F2) is read interpretively off the per-model table, not computed here.
 
 Run:
   cd .../views-models && \
@@ -19,9 +20,9 @@ import pandas as pd
 MODELS_DIR = "models"  # run from the views-models repo root
 WIN = (457, 492)
 TAUS = [1, 10, 25, 100]
+MISS_THRESH = 0.5  # "predicts ~0": pred < this counts as a missed escalation (pre-registered)
 BUCKETS = [(-0.1, 0.0), (0.0, 1.0), (1.0, 10.0), (10.0, 100.0), (100.0, np.inf)]
 
-# (name, kind) — kind is descriptive only
 HURDLES = ["fast_car", "fluorescent_adolescent", "green_squirrel",
            "high_hopes", "little_lies", "twin_flame"]
 REFERENCE = "car_radio"  # plain log1p
@@ -56,14 +57,14 @@ def report(name, df):
     print(f"\n### {name}  (n={n}, mean_obs={obs.mean():.2f}, mean_pred={pred.mean():.2f}, "
           f"MCR={mcr:.3f}, overall_MSLE={msle(pred, obs):.3f})")
     # missed-escalation + tail error per tau
-    print("  tau | n_tail | missed%(pred<0.5) | pred==0% | tailMSLE | tailMAE")
+    print(f"  tau | n_tail | missed%(pred<{MISS_THRESH}) | pred==0% | tailMSLE | tailMAE")
     for tau in TAUS:
         m = obs > tau
         nt = int(m.sum())
         if nt == 0:
             print(f"  {tau:>4}| {nt:>6} | (no cells)")
             continue
-        miss = float((pred[m] < 0.5).mean())
+        miss = float((pred[m] < MISS_THRESH).mean())
         zero = float((pred[m] == 0).mean())
         tmsle = msle(pred[m], obs[m])
         tmae = float(np.mean(np.abs(pred[m] - obs[m])))
