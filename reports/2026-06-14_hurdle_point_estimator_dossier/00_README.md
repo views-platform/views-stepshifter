@@ -1,6 +1,7 @@
 # Dossier — HurdleModel Point-Prediction Estimator
 
-**Status:** ACTIVE (init 2026-06-14). **Phase:** harness + design framed; first experiment not yet pre-registered.
+**Status:** ACTIVE. **Phase:** EXP-01 run + **FALSIFIED** (2026-06-15) — the hard gate drops escalations;
+Option 0 rejected, **Option 1 recommended (deferred)**. Next: Story C decision + D-33 re-escalation.
 **Owner:** Simon Polichinel von der Maase. **Repo:** views-stepshifter.
 
 ## 1. Purpose

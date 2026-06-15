@@ -15,4 +15,19 @@ add a cross-link. Entry template: `references/templates.md` §2; postmortem: §3
 
 ## Pre-registered experiments
 
-*(none yet — EXP-01 pending its pre-registration; see 05 + the pre-flight gate in 03 §D)*
+### EXP-01 · Hurdle tail/distributional readout (C-1) · 2026-06-15 · **FALSIFIED**
+- **Plan (pre-reg):** `05_analysis_plan.md` (committed before any tail result was seen).
+- **Variable:** measured the tail readout (no model change) — pooled 13 calibration sequences joined to
+  observed `lr_ged_sb`, months 457–492, n≈74,490/model.
+- **Driver / artifact / results:** `exp01_tail_readout.py`; full numbers in
+  `postmortem_exp01_hard_gate_drops_escalations.md`.
+- **Readout:** missed-escalation `mean(pred<0.5 | obs>10)` = **0.07–0.32** across the 6 Hurdles vs
+  **0.022** for the plain reference car_radio; tail MSLE worse for all but green_squirrel; per-cell
+  calibration wrecked (over-predict small cells, under-predict the extreme tail) under MCR≈1.
+- **Verdict vs falsifiers (plan §5):** **F1 FIRED** (Hurdle tail missed-escalation + error materially
+  worse than references), **F3 FIRED** (aggregate MCR masks tail collapse), **F2 partial** (LGBMs worse,
+  but the best XGB hurdle still misses 3× the reference — the gate effect survives the confound) ⇒
+  **H FALSIFIED.**
+- **Decision (plan §7):** reject Option 0; **recommend Option 1** (probability gate) via a **deferred**
+  ADR/issue linking #66 — **do not implement** (salvage). Re-escalate **D-33**; track tuning (**D-23**)
+  separately. Postmortem: `postmortem_exp01_hard_gate_drops_escalations.md`.
