@@ -61,7 +61,8 @@ def report(name, df):
         m = obs > tau
         nt = int(m.sum())
         if nt == 0:
-            print(f"  {tau:>4}| {nt:>6} | (no cells)"); continue
+            print(f"  {tau:>4}| {nt:>6} | (no cells)")
+            continue
         miss = float((pred[m] < 0.5).mean())
         zero = float((pred[m] == 0).mean())
         tmsle = msle(pred[m], obs[m])
@@ -84,14 +85,16 @@ def main():
     for name in HURDLES:
         df = load_pairs(name)
         if df is None:
-            print(f"\n### {name}: NO PREDICTION FILES"); continue
+            print(f"\n### {name}: NO PREDICTION FILES")
+            continue
         report(name, df)
     # Reference: plain log1p
     dref = load_pairs(REFERENCE)
     if dref is not None:
         report(f"{REFERENCE} [REFERENCE: plain log1p]", dref)
         # All-zeros baseline on the same actuals
-        dz = dref.copy(); dz["pred"] = 0.0
+        dz = dref.copy()
+        dz["pred"] = 0.0
         report("all-zeros [REFERENCE baseline]", dz)
 
 
