@@ -39,14 +39,30 @@ magnitude-honest in aggregate (MCR 0.75–1.29) — the two errors offset. The o
    must elicit it (Gneiting; D-38).
 5. **Salvage compliance** — code changes (1/2/3) only via a promoted ADR lifting D-26; not unilaterally.
 
-## 4. Current recommendation (provisional, pre-method-review)
+## 4. DECISION (EXP-01, 2026-06-15 — supersedes the provisional Option-0 lean)
 
-**Option 0 now.** The estimator is not breaking aggregate magnitude; the genuine unknown is the tail.
-Build C-1, verify the tail, document the gate as an explicit (if non-textbook) estimator, and pin it.
-If C-1 shows the hard gate is silently dropping escalations, that is the evidence that would justify
-opening a *deferred* ADR for option 1 (probability gate — the cheapest principled fix). Options 2/3 are
-research-grade and squarely post-salvage. This recommendation is what `expert-method-review` should
-attack before anything is pre-registered.
+**Option 0 is REJECTED. Recommend Option 1 (probability gate), deferred.**
+
+The provisional lean was Option 0 ("keep + document"), conditional on the tail. EXP-01 (the
+pre-registered C-1 readout, `05_analysis_plan.md` / `07_experiment_log.md`) **falsified** the
+condition: the hard gate predicts ≈0 on **7–32%** of real escalation cells (`obs>10`) vs **2%** for a
+plain `log1p` reference, and per-cell calibration collapses while the aggregate MCR stays ≈1 — the
+"magnitude-honest" aggregate was two offsetting errors (the Davison/Gneiting risk, confirmed). The
+effect survives the untuned-LGBM confound. Full evidence + intellectual-honesty audit:
+`postmortem_exp01_hard_gate_drops_escalations.md`.
+
+**Therefore:**
+- **Option 1** (binary stage emits `P(Y>0)` + clip → product ≈ `E[Y]`, never hard-zeros an escalation;
+  the probability is already computed and discarded) is the recommended fix. Tracked in **issue #83**,
+  **deferred** (salvage phase — implement only post-salvage, behind a default-off flag, with the EXP-01
+  readout as the acceptance test, ideally alongside the D-39 seam refactor).
+- **Do NOT document the estimator as a deliberate property** — it is a *known mis-specification that
+  aggregates benignly but is tail-harmful*.
+- **Options 2/3** (observation-level conditioning; single count likelihood — D-23) remain post-salvage
+  research; the count-likelihood arm is the open part of **D-24**.
+- Register updated: **D-33** re-escalated to Tier 2; **D-38**/**D-24** decision recorded.
+
+**This section graduates to a proposed ADR on `/rnd-dossier promote`** (the deferred decision of record).
 
 ## 5. Open method questions (for expert-method-review)
 - Is "magnitude-honest in aggregate via offsetting errors" acceptable, or a fragile coincidence that a
