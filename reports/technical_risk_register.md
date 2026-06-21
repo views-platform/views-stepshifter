@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-14
+**Last updated:** 2026-06-21
 **Governing ADR:** Pending (will be added when base docs are adopted)
 **Total entries:** 35
-**Concerns:** Open 32 | Resolved 1 | Invalidated 2
+**Concerns:** Open 31 | Resolved 2 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -138,19 +138,6 @@
 | **Status** | Open |
 | **Location** | `views_stepshifter/manager/stepshifter_manager.py:163,207` (unpickle + predict); `views_stepshifter/models/stepshifter.py:_predict_by_step` (no inverse); ADR-003 Obligations |
 | **Notes** | Commit `5fcfe43` (2025-11-20 → reverted 2026-04-11 by `08ee2eb`) forced stepshifter training into log space via `np.log1p`/`np.expm1`. An artifact pickled during that window carries log-space behavior; loaded under current raw-output code it receives **no** `expm1`, so predictions stay log-compressed but are written as raw `lr_ged_sb` — silently wrong, with **no error signal**. The 2026-06-04 `big_chungus` ensemble (MSLE 2.519, **worse than the all-zeros baseline 2.147**, ~3× the fatalities002 gold standard 0.835) is the suspected materialization; the stepshifter-family constituents are broken while the four r2darts2 DL constituents (own asinh transform) are fine. **Escalates to Tier 1** if the views-models artifact audit confirms any in-production constituent was trained in a non-raw space. ADR-003 mandates load-time guard E2 (fail-loud on a missing transform stamp), but the guard is unimplemented and the artifact audit is open. See also D-16 (separate silent prediction-output transform in the same manager path) and D-13 (numerical behavior untested). Root cause documented in `docs/ADRs/003_raw_target_space_io_contract.md`. **Falsification caveat (2026-06-08, `/falsify` P3+P6):** the audit reframes the **leading** cause as **"no target compression after the revert" (trained-raw)**, not the stale-log-artifact *mismatch* this title emphasizes — every locally inspected stepshifter artifact post-dates the revert and none from the log window were found. But the diagnosis is still **inferential**: the actual `big_chungus` constituent predictions were never inspected (the calibration reports' "Prediction Samples" were available and unused), and the actual constituent artifacts (WandB `2689xjtl`) were never opened. Confidence = "leading hypothesis", not confirmed; re-run `/falsify` after the dossier's real-data EXP-01. **EXP-01 update (2026-06-08, real mechanism):** the **trained-raw** root cause is now **confirmed** — `identity` through the centralized `target_transform` reproduces production MSLE (4.269 ≈ 4.27) *and* the mean-16-on-true-zeros signature (16.04) on real brown_cheese data (n=89,388). The *stale-log-artifact mismatch* sub-hypothesis remains secondary/unconfirmed; the constituent-artifact audit (WandB `2689xjtl`) is still open. Evidence: dossier `07_experiment_log.md` EXP-01. **Production-validated (#57–#61, 2026-06-08):** identity through `main.py -r calibration -t -e -sa` gives production MSLE 4.2687 (≈4.27) and mean prediction ~60.7 — confirming trained-raw on the real pipeline, not just the custom harness. |
-
----
-
-### D-18 — Raw-I/O contract is unfalsifiable in CI until guards E1/E2 and the gate key are implemented
-
-| Field | Value |
-|---|---|
-| **Tier** | 2 |
-| **Trigger** | When a contributor reintroduces or adds an internal target transform to `StepshifterModel` before the ADR-003 characterization test (E1), load-time guard (E2), and the gate `target_transform` key are implemented. |
-| **Source** | expert-review (2026-06-08) |
-| **Status** | Partially resolved (2026-06-13) — gate key + E1-equivalent test shipped; **E2 load-time guard still Open** |
-| **Location** | ADR-003 §"Enforcement required at ratification"; ~~`reproducibility_gate.py:24` (`CORE_GENOME` lacks `target_transform`)~~ → now `:25` (key present, validated steps 5–7); E1-equivalent test now in `tests/test_target_transforms.py`; **E2 still absent** (no load-time guard) |
-| **Notes** | ADR-003 ratifies a raw-in/raw-out contract but is documentation-only until guards E1 (fit→predict characterization test asserting raw-space output) and E2 (load-time transform-name guard) ship and `target_transform` is added to the gate. Until then, a future silent-transform commit — a `5fcfe43` rhyme — passes CI green, which is exactly the regression that produced D-17. The fix is cheap (E1 needs no registry) and should not wait for the full declarative `TRANSFORMS` mechanism. See also D-09 (gate omits keys models dereference), D-10 (gate runs only on the train path), and D-13 (existing tests verify wiring, not numerical behavior). **Update (2026-06-13, repo-assimilation):** this entry's premise is now **substantially stale**. `target_transform` IS in `CORE_GENOME` (`reproducibility_gate.py:25`) and is validated against the closed registry (steps 5–7), and an **E1-equivalent characterization test** ships and is green (`tests/test_target_transforms.py::test_predict_routes_through_inverse_exactly_once_end_to_end`, plus the `_process_data`-applies-forward-once and identity-noop tests). A silent-transform commit no longer passes CI unflagged. **What remains Open:** the ADR-003 **E2 load-time guard** (fail-loud on a missing `_target_transform_name` stamp when unpickling a pre-contract artifact) is still unimplemented — this is the residual gap and the one still tied to D-17. The doc drift this staleness reflects (ADR-001/CIC under-describe the shipped contract) is tracked separately in **D-31**. |
 
 ---
 
@@ -464,3 +451,15 @@
 | **Source** | Tech debt audit (2026-04-07); confirmed resolved by repo-assimilation (2026-06-08) |
 | **Status** | Resolved (2026-06-08) |
 | **Resolution** | The dependency is now declared: `pyproject.toml:18` reads `darts = "^0.40.0"` (uncommented), satisfying the five runtime import sites (`stepshifter.py:5`, `stepshifter.py:54,57` lazy, `hurdle_model.py:45` lazy, `darts_model.py:2`). The original entry flagged this as "likely already resolved" pending verification; verified on the 2026-06-08 assimilation audit. |
+
+---
+
+### D-18 — Raw-I/O contract is unfalsifiable in CI until guards E1/E2 and the gate key are implemented — RESOLVED
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 |
+| **Original trigger** | When a contributor reintroduces or adds an internal target transform to `StepshifterModel` before the ADR-003 characterization test (E1), load-time guard (E2), and the gate `target_transform` key are implemented. |
+| **Source** | expert-review (2026-06-08) |
+| **Status** | Resolved (2026-06-21) — all three ADR-003 enforcement obligations now ship |
+| **Resolution** | ADR-003 mandated three enforcement artifacts, all now present: (1) the gate `target_transform` key is in `CORE_GENOME` (`reproducibility_gate.py:25`), validated against the closed registry (steps 5–7); (2) the **E1** characterization test ships and is green (`tests/test_target_transforms.py::test_predict_routes_through_inverse_exactly_once_end_to_end`, plus `_process_data`-applies-forward-once and identity-noop tests); (3) the **E2** load-time guard now ships (Story A1, #86) — `StepshifterManager._guard_loaded_artifact` raises `PreContractArtifactError` after each `pickle.load` (`stepshifter_manager.py:29-49`, called at the evaluate/forecast load sites) when a loaded artifact lacks the `_target_transform_name` stamp, closing the frozen-pre-contract-artifact ambiguity that tied this to D-17. The guard is presence-only (a legit `log1p` artifact loads fine), per ADR-003 E2. The ADR-001/CIC doc-drift this entry once noted is tracked separately in **D-31** (Workstream C). |
