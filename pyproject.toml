@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "views_stepshifter"
-version = "1.3.0"
+version = "1.4.0"
 description = ""
 authors = [
     "Xiaolong Sun <xiaolong.sun@pcr.uu.se>",
