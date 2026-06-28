@@ -138,8 +138,28 @@ class StepshifterModel:
             series[self._independent_variables] for series in self._series
         ]
 
+    def _new_regressor(self, step: int):
+        """Construct a darts regression model for one step-ahead horizon.
+
+        ``use_static_covariates=False`` is forced (it overrides any value passed in
+        the hyperparameters). ``_prepare_time_series`` groups the panel into one
+        series per cell with ``TimeSeries.from_group_dataframe(group_cols=<level>)``,
+        which also attaches the cell id (priogrid_gid / country_id) as a darts static
+        covariate. We need that id attached only as a *label* — the prediction-to-cell
+        assembly in ``_predict_by_step`` reads it back — but it must never be a model
+        *feature*: it is an arbitrary identifier with no metric meaning, yet darts
+        would feed it to the regressor as a numeric column. A tree then splits on it,
+        and because PRIO-GRID ids are row-major, that memorises id-neighbourhoods and
+        smears outlier cells into latitude lines (the forecast "stripe"). There is no
+        valid modelling use for the raw id as a feature, so the flag is not
+        configurable here. Legitimate spatial signal belongs in real covariates
+        (lat/lon, or a positional encoding) — never the cell id.
+        """
+        reg_kwargs = {**self._reg_params, "use_static_covariates": False}
+        return self._reg(lags_past_covariates=[-step], **reg_kwargs)
+
     def _fit_by_step(self, step):
-        model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+        model = self._new_regressor(step)
         model.fit(self._target_train, past_covariates=self._past_cov)
         return model
 
@@ -200,7 +220,7 @@ class StepshifterModel:
             for step in tqdm.tqdm(
                 self._steps, desc="Fitting model for step", leave=True
             ):
-                model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                model = self._new_regressor(step)
                 model.fit(self._target_train,
                             past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
                 self._models[step] = model

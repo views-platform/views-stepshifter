@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-14
+**Last updated:** 2026-06-28
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 35
-**Concerns:** Open 32 | Resolved 1 | Invalidated 2
+**Total entries:** 36
+**Concerns:** Open 32 | Resolved 2 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -464,3 +464,17 @@
 | **Source** | Tech debt audit (2026-04-07); confirmed resolved by repo-assimilation (2026-06-08) |
 | **Status** | Resolved (2026-06-08) |
 | **Resolution** | The dependency is now declared: `pyproject.toml:18` reads `darts = "^0.40.0"` (uncommented), satisfying the five runtime import sites (`stepshifter.py:5`, `stepshifter.py:54,57` lazy, `hurdle_model.py:45` lazy, `darts_model.py:2`). The original entry flagged this as "likely already resolved" pending verification; verified on the 2026-06-08 assimilation audit. |
+
+---
+
+### D-41 — Stepshifter feeds the PRIO-GRID cell id to the regressor as a feature (darts static-covariate default) → outlier cells smeared into latitude-wide "stripes" — RESOLVED
+
+| Field | Value |
+|---|---|
+| **Tier** | 1 |
+| **Trigger** | When forecasting at long lead times, or whenever a single cell carries an extreme target (a real massacre, or a data artifact like the Tigray over-concentration), inspect the PGM map for a horizontal band at that cell's latitude. |
+| **Source** | "Stripe" investigation (2026-06-28); diagnosed and reproduced on the real panel. |
+| **Status** | Resolved (2026-06-28) — fix on branch `fix/stepshifter-static-covariate-id-leak`, PR open to `development` (not yet merged). |
+| **Location** | `views_stepshifter/models/stepshifter.py` — model construction (`_fit_by_step`, the cuda branch of `fit`); root at `_prepare_time_series` (`:127`) `TimeSeries.from_group_dataframe(group_cols=self._level)`. |
+| **Narrative** | `from_group_dataframe` attaches the group key (`priogrid_gid` / `country_id`) as a darts *static covariate*, and darts regression models use static covariates as model features by default (`use_static_covariates=True`). The id is thus fed to XGBoost/LightGBM as a numeric column; the tree splits on it, and because PRIO-GRID ids are row-major (`id=(row-1)*720+col`), the model memorises the id-neighbourhood of any extreme cell and emits an elevated baseline across that whole latitude row — a horizontal "stripe" through empty/desert cells with no data basis. Silent: zero-history, identical-feature cells on the poisoned row forecast many× their neighbours purely by id. **Horizon-dependent** — invisible at step 1, severe at step 36 (covariate signal fades → tree leans on the memorised id), so near-horizon tests miss it. Compounds with the upstream Tigray data artifact (one cell, ~273k deaths) but is **independent** and distorts ANY sharp hotspot, real or artificial. |
+| **Resolution** | `_new_regressor` helper forces `use_static_covariates=False` (overriding any hyperparameter value); the id stays attached only as a *label* for prediction→cell assembly (`_predict_by_step:171`), never as a feature. Verified on the real `caring_fish` panel (full 437-month history): step-36 row-floor 22.6× → 0.87× (flat) with the fix; flat at step 1 either way. Unit tests in `test_stepshifter.py`. **Carry-forward:** removing the feature changes model behaviour (not only the artifact) → retrained models require **skill re-evaluation**, weighting far horizons. The raw id must never be re-enabled as a feature; legitimate spatial signal belongs in real covariates (lat/lon, or a positional encoding). |
