@@ -277,3 +277,45 @@ def test_save(config, partitioner_dict, tmp_path):
     model_path = tmp_path / "model.pkl"
     model.save(model_path)
     assert model_path.exists()
+
+
+def test_new_regressor_excludes_grid_id_static_covariate(config, partitioner_dict):
+    """The PRIO-GRID cell id must never reach the regressor as a feature.
+
+    ``_prepare_time_series`` builds the per-cell series with
+    ``TimeSeries.from_group_dataframe(group_cols=<level>)``, which attaches the
+    cell id (priogrid_gid / country_id) as a darts *static covariate*. darts
+    regression models use static covariates as model features by default
+    (``use_static_covariates=True``). Because PRIO-GRID ids are row-major, a tree
+    that splits on the id smears an outlier cell into a whole latitude row (the
+    forecast "stripe" artifact). The regressor must therefore be constructed with
+    ``use_static_covariates=False``.
+    """
+    model = StepshifterModel(config, partitioner_dict)
+    model._reg = MagicMock()
+
+    model._new_regressor(step=3)
+
+    model._reg.assert_called_once()
+    _, kwargs = model._reg.call_args
+    assert kwargs.get("use_static_covariates") is False
+    assert kwargs.get("lags_past_covariates") == [-3]
+
+
+def test_new_regressor_forces_static_covariates_off_even_if_requested(
+    config, partitioner_dict
+):
+    """The grid id must never be a model feature, so the flag is forced off even if
+    a caller puts ``use_static_covariates=True`` in the hyperparameters. The raw
+    cell id is an arbitrary label with no metric meaning; there is no valid
+    modelling use for it as a feature (legitimate spatial signal belongs in real
+    covariates such as lat/lon or a positional encoding).
+    """
+    model = StepshifterModel(config, partitioner_dict)
+    model._reg = MagicMock()
+    model._reg_params = {"use_static_covariates": True, "n_estimators": 10}
+
+    model._new_regressor(step=1)
+
+    _, kwargs = model._reg.call_args
+    assert kwargs.get("use_static_covariates") is False
