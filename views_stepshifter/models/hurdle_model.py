@@ -67,13 +67,25 @@ class HurdleModel(StepshifterModel):
                     f"Change the model in the config file."
                 )
 
+    def _new_classifier(self, step: int):
+        """Construct the binary-stage darts classifier for one step-ahead horizon.
+
+        Forces ``use_static_covariates=False`` for the same reason as the inherited
+        ``_new_regressor`` (D-41): ``from_group_dataframe`` attaches the entity id
+        (priogrid_gid / country_id) as a static covariate, and darts uses static
+        covariates as model features by default — but the raw id must never be a
+        feature. Overrides any value in the hyperparameters.
+        """
+        clf_kwargs = {**self._clf_params, "use_static_covariates": False}
+        return self._clf(lags_past_covariates=[-step], **clf_kwargs)
+
     def _fit_by_step(self, step, target_binary, target_pos, past_cov_pos):
         # Fit binary-like stage using a classification model
-        binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
+        binary_model = self._new_classifier(step)
         binary_model.fit(target_binary, past_covariates=self._past_cov)
 
         # Fit positive stage using the regression model
-        positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+        positive_model = self._new_regressor(step)
         positive_model.fit(target_pos, past_covariates=past_cov_pos)
 
         return (binary_model, positive_model)
@@ -124,11 +136,11 @@ class HurdleModel(StepshifterModel):
         if self.get_device_params().get("device") == "cuda":
             for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
                 # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
-                binary_model = self._clf(lags_past_covariates=[-step], **self._clf_params)
+                binary_model = self._new_classifier(step)
                 binary_model.fit(target_binary, past_covariates=self._past_cov)
 
                 # Fit positive stage using the regression model
-                positive_model = self._reg(lags_past_covariates=[-step], **self._reg_params)
+                positive_model = self._new_regressor(step)
                 positive_model.fit(target_pos, past_covariates=past_cov_pos)
                 self._models[step] = (binary_model, positive_model)
         else:
