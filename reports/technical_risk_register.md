@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-21
+**Last updated:** 2026-06-28
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 35
-**Concerns:** Open 31 | Resolved 2 | Invalidated 2
+**Total entries:** 36
+**Concerns:** Open 31 | Resolved 3 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -463,3 +463,17 @@
 | **Source** | expert-review (2026-06-08) |
 | **Status** | Resolved (2026-06-21) — all three ADR-003 enforcement obligations now ship |
 | **Resolution** | ADR-003 mandated three enforcement artifacts, all now present: (1) the gate `target_transform` key is in `CORE_GENOME` (`reproducibility_gate.py:25`), validated against the closed registry (steps 5–7); (2) the **E1** characterization test ships and is green (`tests/test_target_transforms.py::test_predict_routes_through_inverse_exactly_once_end_to_end`, plus `_process_data`-applies-forward-once and identity-noop tests); (3) the **E2** load-time guard now ships (Story A1, #86) — `StepshifterManager._guard_loaded_artifact` raises `PreContractArtifactError` after each `pickle.load` (`stepshifter_manager.py:29-49`, called at the evaluate/forecast load sites) when a loaded artifact lacks the `_target_transform_name` stamp, closing the frozen-pre-contract-artifact ambiguity that tied this to D-17. The guard is presence-only (a legit `log1p` artifact loads fine), per ADR-003 E2. The ADR-001/CIC doc-drift this entry once noted is tracked separately in **D-31** (Workstream C). |
+
+---
+
+### D-41 — Stepshifter feeds the PRIO-GRID cell id to the regressor as a feature (darts static-covariate default) → outlier cells smeared into latitude-wide "stripes" — RESOLVED
+
+| Field | Value |
+|---|---|
+| **Tier** | 1 |
+| **Trigger** | When forecasting at long lead times, or whenever a single cell carries an extreme target (a real massacre, or a data artifact like the Tigray over-concentration), inspect the PGM map for a horizontal band at that cell's latitude. |
+| **Source** | "Stripe" investigation (2026-06-28); diagnosed and reproduced on the real panel. |
+| **Status** | Resolved (2026-06-28) — fix on branch `fix/stepshifter-static-covariate-id-leak`, PR open to `development` (not yet merged). |
+| **Location** | `views_stepshifter/models/stepshifter.py` — model construction (`_fit_by_step`, the cuda branch of `fit`); root at `_prepare_time_series` (`:127`) `TimeSeries.from_group_dataframe(group_cols=self._level)`. |
+| **Narrative** | `from_group_dataframe` attaches the group key (`priogrid_gid` / `country_id`) as a darts *static covariate*, and darts regression models use static covariates as model features by default (`use_static_covariates=True`). The id is thus fed to XGBoost/LightGBM as a numeric column; the tree splits on it, and because PRIO-GRID ids are row-major (`id=(row-1)*720+col`), the model memorises the id-neighbourhood of any extreme cell and emits an elevated baseline across that whole latitude row — a horizontal "stripe" through empty/desert cells with no data basis. Silent: zero-history, identical-feature cells on the poisoned row forecast many× their neighbours purely by id. **Horizon-dependent** — invisible at step 1, severe at step 36 (covariate signal fades → tree leans on the memorised id), so near-horizon tests miss it. Compounds with the upstream Tigray data artifact (one cell, ~273k deaths) but is **independent** and distorts ANY sharp hotspot, real or artificial. |
+| **Resolution** | `_new_regressor` helper forces `use_static_covariates=False` (overriding any hyperparameter value); the id stays attached only as a *label* for prediction→cell assembly (`_predict_by_step:171`), never as a feature. Verified on the real `caring_fish` panel (full 437-month history): step-36 row-floor 22.6× → 0.87× (flat) with the fix; flat at step 1 either way. Unit tests in `test_stepshifter.py`. **Carry-forward:** removing the feature changes model behaviour (not only the artifact) → retrained models require **skill re-evaluation**, weighting far horizons. The raw id must never be re-enabled as a feature; legitimate spatial signal belongs in real covariates (lat/lon, or a positional encoding). **Scope correction (2026-06-28):** the initial fix covered only `StepshifterModel`. `HurdleModel`/`ShurfModel` build their own binary+positive darts regressors and bypassed the helper — so the leak survived in every Hurdle constituent (6/12 of the PGM ensemble `skinny_love`, 6/19 of CM `pink_ponyclub`). Extended the fix: a `_new_classifier` helper (binary stage) + routing the positive stage through `_new_regressor`, both forcing `use_static_covariates=False`, across `hurdle_model.py` and `shurf_model.py`. The CM-level question (is country identity legitimate signal that should be re-added properly?) is tracked in **#97**. |

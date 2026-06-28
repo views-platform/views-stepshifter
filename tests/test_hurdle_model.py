@@ -11,6 +11,7 @@ finding of Story A (#78); a deliberate change to a probability gate should break
 import pytest
 import pandas as pd
 import numpy as np
+from unittest.mock import MagicMock
 from views_stepshifter.models.hurdle_model import HurdleModel
 
 
@@ -146,3 +147,45 @@ def test_save(sample_config, sample_partitioner_dict, tmp_path, sample_dataframe
     save_path = tmp_path / "model.pkl"
     model.save(save_path)
     assert save_path.exists()
+
+
+def test_new_classifier_excludes_grid_id_static_covariate(
+    sample_config, sample_partitioner_dict
+):
+    """The binary stage must not use the entity id (priogrid_gid/country_id) as a
+    feature either. Same root as D-41: ``from_group_dataframe`` attaches the id as a
+    darts static covariate and darts uses static covariates by default; the binary
+    classifier must be built with ``use_static_covariates=False`` (forced).
+    """
+    model = HurdleModel(sample_config, sample_partitioner_dict)
+    model._clf = MagicMock()
+
+    model._new_classifier(step=2)
+
+    _, kwargs = model._clf.call_args
+    assert kwargs.get("use_static_covariates") is False
+    assert kwargs.get("lags_past_covariates") == [-2]
+
+
+def test_fit_by_step_routes_both_stages_through_static_cov_safe_helpers(
+    sample_config, sample_partitioner_dict
+):
+    """`_fit_by_step` must build BOTH the binary and positive regressors via the
+    `use_static_covariates=False` helpers (`_new_classifier`/`_new_regressor`), not
+    by constructing the darts models directly — otherwise the D-41 grid-id leak
+    returns for the Hurdle constituents.
+    """
+    model = HurdleModel(sample_config, sample_partitioner_dict)
+    model._new_classifier = MagicMock(return_value=MagicMock())
+    model._new_regressor = MagicMock(return_value=MagicMock())
+    model._past_cov = MagicMock()
+
+    model._fit_by_step(
+        step=4,
+        target_binary=MagicMock(),
+        target_pos=MagicMock(),
+        past_cov_pos=MagicMock(),
+    )
+
+    model._new_classifier.assert_called_once_with(4)
+    model._new_regressor.assert_called_once_with(4)

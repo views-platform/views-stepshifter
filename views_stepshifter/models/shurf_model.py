@@ -56,15 +56,11 @@ class ShurfModel(HurdleModel):
 
             for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
                 # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
-                binary_model = self._clf(
-                    lags_past_covariates=[-step], **self._clf_params
-                )
+                binary_model = self._new_classifier(step)
                 binary_model.fit(target_binary, past_covariates=self._past_cov)
 
                 # Fit positive stage using the regression model
-                positive_model = self._reg(
-                    lags_past_covariates=[-step], **self._reg_params
-                )
+                positive_model = self._new_regressor(step)
                 positive_model.fit(target_pos, past_covariates=past_cov_pos)
                 self._models[step] = (binary_model, positive_model)
 
