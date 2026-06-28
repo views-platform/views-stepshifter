@@ -1,6 +1,8 @@
 # Dossier: Restore Stepshifter Target Compression
 
-**Status:** EXP-01 executed + logged (2026-06-08). **Diagnosis CONFIRMED** (identity reproduces production 4.27); **naive transform fix FALSIFIED** (F4 fired — compression wins MSLE but ~2.5× worse on the escalation tail). Program re-scoped toward **tail-aware fixes** before any production flip.
+**Status:** 🗄️ **ARCHIVED (2026-06-10).** Salvage complete and shipped — **views-stepshifter 1.3.0 on PyPI**; `chunky_bunny` ensemble rebuilt to **cm MSLE 0.588** (was 2.519). Outcome write-up: `10_team_report.md`; incident post-mortem: `11_postmortem.md`. **The optimization is NOT done** — F4 fired (compression restores sane MSLE but is ~2.5× worse on the escalation tail), so the tail/calibration work is **deferred to EXP-02** (register D-22/D-23), a separate future program. Open risks: D-30 (DL output guard), #75 (real tests), D-14 (lockfile).
+
+_Prior status (point-in-time):_ EXP-01 executed + logged (2026-06-08). **Diagnosis CONFIRMED** (identity reproduces production 4.27); **naive transform fix FALSIFIED** (F4 fired — compression wins MSLE but ~2.5× worse on the escalation tail). Program re-scoped toward **tail-aware fixes** before any production flip.
 
 **Forensic reconstruction (2026-06-09 → `08_forensic_what_happened.md`, report-ready):** the `big_chungus` breakage is **narrow** — only the **plain** constituents broke (raw target, MSLE 4–5); the **Hurdle** (0.79–1.08) and **deep-learning** (0.43–0.57) constituents were **healthy all along**, per the report's own per-constituent leaderboard. The original FINDINGS over-claimed "all 19 broken." Hurdle health corroborated twice (June report fast_car 0.847 ≈ fresh run 0.784). Open distinct bug: ShurfModel `log_target` ordering (`shurf_model.py:210-212`).
 **Created:** 2026-06-08 · **Branch:** `investigation/raw-target-space-io`

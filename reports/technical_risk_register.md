@@ -1,9 +1,9 @@
 # Technical Risk Register — views-stepshifter
 
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-28
 **Governing ADR:** Pending (will be added when base docs are adopted)
-**Total entries:** 26
-**Concerns:** Open 23 | Resolved 1 | Invalidated 2
+**Total entries:** 36
+**Concerns:** Open 32 | Resolved 2 | Invalidated 2
 
 > **ID convention:** This register uses the `D-xx` (Debt) prefix for all concern entries; there are no disagreement entries. IDs are permanent and sequential.
 
@@ -148,9 +148,9 @@
 | **Tier** | 2 |
 | **Trigger** | When a contributor reintroduces or adds an internal target transform to `StepshifterModel` before the ADR-003 characterization test (E1), load-time guard (E2), and the gate `target_transform` key are implemented. |
 | **Source** | expert-review (2026-06-08) |
-| **Status** | Open |
-| **Location** | ADR-003 §"Enforcement required at ratification"; `views_stepshifter/infrastructure/reproducibility_gate.py:24` (`CORE_GENOME` lacks `target_transform`); no characterization test in `tests/` |
-| **Notes** | ADR-003 ratifies a raw-in/raw-out contract but is documentation-only until guards E1 (fit→predict characterization test asserting raw-space output) and E2 (load-time transform-name guard) ship and `target_transform` is added to the gate. Until then, a future silent-transform commit — a `5fcfe43` rhyme — passes CI green, which is exactly the regression that produced D-17. The fix is cheap (E1 needs no registry) and should not wait for the full declarative `TRANSFORMS` mechanism. See also D-09 (gate omits keys models dereference), D-10 (gate runs only on the train path), and D-13 (existing tests verify wiring, not numerical behavior). |
+| **Status** | Partially resolved (2026-06-13) — gate key + E1-equivalent test shipped; **E2 load-time guard still Open** |
+| **Location** | ADR-003 §"Enforcement required at ratification"; ~~`reproducibility_gate.py:24` (`CORE_GENOME` lacks `target_transform`)~~ → now `:25` (key present, validated steps 5–7); E1-equivalent test now in `tests/test_target_transforms.py`; **E2 still absent** (no load-time guard) |
+| **Notes** | ADR-003 ratifies a raw-in/raw-out contract but is documentation-only until guards E1 (fit→predict characterization test asserting raw-space output) and E2 (load-time transform-name guard) ship and `target_transform` is added to the gate. Until then, a future silent-transform commit — a `5fcfe43` rhyme — passes CI green, which is exactly the regression that produced D-17. The fix is cheap (E1 needs no registry) and should not wait for the full declarative `TRANSFORMS` mechanism. See also D-09 (gate omits keys models dereference), D-10 (gate runs only on the train path), and D-13 (existing tests verify wiring, not numerical behavior). **Update (2026-06-13, repo-assimilation):** this entry's premise is now **substantially stale**. `target_transform` IS in `CORE_GENOME` (`reproducibility_gate.py:25`) and is validated against the closed registry (steps 5–7), and an **E1-equivalent characterization test** ships and is green (`tests/test_target_transforms.py::test_predict_routes_through_inverse_exactly_once_end_to_end`, plus the `_process_data`-applies-forward-once and identity-noop tests). A silent-transform commit no longer passes CI unflagged. **What remains Open:** the ADR-003 **E2 load-time guard** (fail-loud on a missing `_target_transform_name` stamp when unpickling a pre-contract artifact) is still unimplemented — this is the residual gap and the one still tied to D-17. The doc drift this staleness reflects (ADR-001/CIC under-describe the shipped contract) is tracked separately in **D-31**. |
 
 ---
 
@@ -202,7 +202,7 @@
 | **Source** | expert-method-review (2026-06-08) |
 | **Status** | Open — **production-validated** (EXP-01 + #57–#61) |
 | **Location** | dossier `reports/2026-06-08_restore_target_compression_dossier/02_design.md`, `04_roadmap.md` (EXP-01), `05_analysis_plan.md`, `07_experiment_log.md` (EXP-01) |
-| **Notes** | On a ~90%-zero target, MSLE structurally favours near-zero prediction and **tail-compression** (Bolin2023 on scale-dependence of scoring rules; Gneiting2014). A transform can *win* cm MSLE while **degrading the heavy-tail / escalation predictions that are the operational product** (Hegre2022 on escalation; Davison/EVT lens, Abilasha2022). Ranking *transforms* on MSLE is also near-circular (log1p training ≈ optimising MSLE). Mitigation: report MSLE **plus** a tail-conditional error (error \| obs > threshold) **plus** calibration-in-the-large, and make the zero-fit↔tail tradeoff visible before selecting. The strongest single fix from the method review. **EXP-01 confirmation (2026-06-08, real brown_cheese, n=89,388):** the pre-registered F4 falsifier **FIRED** — on MSLE alone `asinh` (0.515) / `log1p` (0.521) crush `identity` (4.269), but on the **escalation tail they are ~2.5× WORSE** (tail MSLE 4.6/4.2 vs 1.80) and calibration collapses from 2.46× over to ~0.24× under. Selecting on MSLE alone would have crowned a tail-blind model. This is no longer a hypothetical risk — it is the observed outcome; any selection (incl. views-models#114) **must** use the joint tail+calibration readout. **Production-validated (#57–#61, 2026-06-08):** all three arms re-run through the full `main.py` → views-evaluation pipeline matched the custom driver to 3 decimals on every metric, and F4 fired on production data — the risk is confirmed on the trusted path, not just the custom harness. |
+| **Notes** | On a ~90%-zero target, MSLE structurally favours near-zero prediction and **tail-compression** (Bolin2023 on scale-dependence of scoring rules; Gneiting2014). A transform can *win* cm MSLE while **degrading the heavy-tail / escalation predictions that are the operational product** (Hegre2022 on escalation; Davison/EVT lens, Abilasha2022). Ranking *transforms* on MSLE is also near-circular (log1p training ≈ optimising MSLE). Mitigation: report MSLE **plus** a tail-conditional error (error \| obs > threshold) **plus** calibration-in-the-large, and make the zero-fit↔tail tradeoff visible before selecting. The strongest single fix from the method review. **EXP-01 confirmation (2026-06-08, real brown_cheese, n=89,388):** the pre-registered F4 falsifier **FIRED** — on MSLE alone `asinh` (0.515) / `log1p` (0.521) crush `identity` (4.269), but on the **escalation tail they are ~2.5× WORSE** (tail MSLE 4.6/4.2 vs 1.80) and calibration collapses from 2.46× over to ~0.24× under. Selecting on MSLE alone would have crowned a tail-blind model. This is no longer a hypothetical risk — it is the observed outcome; any selection (incl. views-models#114) **must** use the joint tail+calibration readout. **Production-validated (#57–#61, 2026-06-08):** all three arms re-run through the full `main.py` → views-evaluation pipeline matched the custom driver to 3 decimals on every metric, and F4 fired on production data — the risk is confirmed on the trusted path, not just the custom harness. **Story A corroboration (2026-06-13, #78):** the 6 `chunky_bunny` Hurdle constituents (all `identity`) give MSLE 0.81–1.19 at MCR 0.75–1.29 (magnitude-honest), while the plain `log1p` `car_radio` wins MSLE (0.467) at MCR 0.327 (predicts ⅓ of reality). The **verified** controlled comparison `twin_flame` vs `car_radio` (identical 69-feature set) — MSLE 1.193/MCR 1.12 vs 0.467/0.327 — shows the entire MSLE gap is `log1p` timidity, not skill. MCR is the guardrail that exposes it. Evidence: `reports/2026-06-13_hurdle_point_estimate_diagnosis/findings.md`. |
 
 ---
 
@@ -226,9 +226,9 @@
 | **Tier** | 3 |
 | **Trigger** | When fixing `target_transform` inside HurdleModel without evaluating its binary `(x>0)` split against a single count-model baseline. |
 | **Source** | expert-method-review (2026-06-08) |
-| **Status** | Open |
+| **Status** | Open — **partially addressed** (EXP-01, 2026-06-15): the hurdle's hard gate is now shown tail-harmful → Option 1 (probability gate) recommended (issue **#83**). The single-**count-model** benchmark (Option 3, Tweedie/NB) remains **un-run** — still open. |
 | **Location** | `views_stepshifter/models/hurdle_model.py:101`; dossier `02_design.md` |
-| **Notes** | Per Harrell (anti-dichotomization), thresholding the outcome at >0 is information-lossy and fragile; the design takes the hurdle structure as given and only fixes the transform inside it. No evidence the two-stage hurdle beats a single well-specified count model. Mitigation: include a single-count-model baseline vs the hurdle in the readout. Fetch: Harrell *Regression Modeling Strategies*; a ZIP/hurdle canonical (Lambert 1992 / Mullahy 1986). |
+| **Notes** | Per Harrell (anti-dichotomization), thresholding the outcome at >0 is information-lossy and fragile; the design takes the hurdle structure as given and only fixes the transform inside it. No evidence the two-stage hurdle beats a single well-specified count model. Mitigation: include a single-count-model baseline vs the hurdle in the readout. Fetch: Harrell *Regression Modeling Strategies*; a ZIP/hurdle canonical (Lambert 1992 / Mullahy 1986). **EXP-01 (2026-06-15):** the readout compared the hurdle against a plain `log1p` model + all-zeros (not a count likelihood); it confirmed the gate drops escalations (→ #83, Option 1). A **count-likelihood** arm (Option 3, D-23) was *not* tested and remains the open part of this entry. Cross-ref **D-38** (decision), **D-23** (count-likelihood), **D-33** (the gate). |
 
 ---
 
@@ -310,6 +310,123 @@
 
 ---
 
+### D-31 — Governing docs (ADR-001, CIC) and stale entry D-18 under-describe the shipped `target_transform` gate contract
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When reading ADR-001 or `docs/CICs/ReproducibilityGate.md` to learn the required core hyperparameter keys, or when scoping ADR-003 enforcement work off D-18's "CORE_GENOME lacks target_transform / documentation-only" claim — verify against `reproducibility_gate.py:25` and the shipped `tests/test_target_transforms.py` first. |
+| **Source** | repo-assimilation (2026-06-13) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/infrastructure/reproducibility_gate.py:25` (key present + validated, steps 5–7) vs `docs/ADRs/001_reproducibility_gate.md:27` and `docs/CICs/ReproducibilityGate.md:28,49` (both document `CORE_GENOME = ["steps","time_steps","parameters"]` — no `target_transform`); `docs/ADRs/003_raw_target_space_io_contract.md:2` (Status still "Proposed") |
+| **Notes** | The implemented contract has outrun its governing docs. `CORE_GENOME` now includes `target_transform` and `audit_manifest` validates it against the closed `TRANSFORMS` registry (presence, registry membership, the Hurdle/Shurf identity-pin, and the Shurf `log_target=False` rule — steps 5–7), shipped in 1.3.0. But **ADR-001 and the ReproducibilityGate CIC still document the pre-`target_transform` three-key genome**, and **D-18 is now substantially stale** (it asserts the key is absent and the contract "documentation-only," both false — see the D-18 update). Separately, **ADR-003 is still labelled `Status: Proposed`** though its forward/inverse mechanism, registry, and E1-equivalent tests are all merged and green. No runtime impact — pure doc/governance drift — but a reader trusting ADR-001/CIC/D-18 would misjudge what the gate enforces and could duplicate already-shipped work or mis-scope the residual gap. Mitigation: refresh ADR-001 + the CIC's `CORE_GENOME` list, flip ADR-003 to Accepted (or note the implemented-but-pending-platform-ADR state), and keep D-18 narrowed to its true residual (the E2 load-time guard). See also **D-18** (the stale entry this corrects), **D-19** (ADR-003 `⟨PENDING⟩` platform-ADR reference + Proposed status), **D-09** (a separate, still-valid gate-coverage gap). |
+
+---
+
+### D-32 — `torch` imported unconditionally but is not a declared direct dependency
+
+| Field | Value |
+|---|---|
+| **Tier** | 4 |
+| **Trigger** | When provisioning a fresh environment where `darts` is installed without its torch extra, or when a future `darts` release makes torch fully optional — the top-level `import torch` in `stepshifter.py` will then `ImportError` at package import. |
+| **Source** | repo-assimilation (2026-06-13) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/stepshifter.py:13` (`import torch`, module top-level); `pyproject.toml:12-22` (dependency block — no `torch` entry) |
+| **Notes** | `torch` is imported unconditionally at module load solely to power `StepshifterModel.get_device_params()` CUDA/MPS detection (`stepshifter.py:46-53`), yet it is not declared as a direct dependency — it is satisfied only transitively by the full `darts` package. This is the same class of latent dependency-declaration gap as the now-resolved **D-07** (darts itself was once imported-but-undeclared). Low severity because the transitive pin holds today and CI passes; it becomes a fresh-install break only if darts's torch coupling changes or a torch-free darts variant is substituted. Mitigation: declare `torch` explicitly in `pyproject.toml`, or guard the import (`try/except ImportError` with a CPU-only fallback in `get_device_params`). See also **D-07** (resolved precedent), **D-14** (build/dependency reproducibility). |
+
+---
+
+### D-33 — HurdleModel point prediction may be a hard {0,1} gate rather than the hurdle expectation P(y>0)·E[y|y>0] → silent under-prediction
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 (**re-escalated from 3** during EXP-01, 2026-06-15 — the deferred tail/distributional risk is now **CONFIRMED HARMFUL**: the hard gate predicts ≈0 on **7–32%** of real escalation cells vs **2%** for a plain reference; the aggregate-benign MCR was masking it) |
+| **Trigger** | When auditing HurdleModel point-forecast calibration, or before configuring a new Hurdle model, verify whether the Darts classifier's `predict` (via `_predict_by_step`) returns class labels {0,1} or probabilities [0,1]. |
+| **Source** | expert-review (2026-06-13); magnitude assessed Story A / #78 (2026-06-13); tail confirmed EXP-01 (2026-06-15) |
+| **Status** | Open — **tail-harmful CONFIRMED** (EXP-01, 2026-06-15): hard gate drops escalations; recommended fix = **Option 1 (probability gate), deferred** to a new issue + #66 (salvage phase) |
+| **Location** | `views_stepshifter/models/hurdle_model.py:51-68` (classifier factory), `:94-97` / `:244-247` (binary×positive product, **no `clip`**); `views_stepshifter/models/stepshifter.py:157-163` (`model.predict` called with no likelihood/sampling params); contrast `views_stepshifter/models/shurf_model.py:134-136` (Shurf **does** clip classification to [0,1]) |
+| **Notes** | The Hurdle point forecast is `pd.concat(binary) * pd.concat(positive)` with **no** `clip(0,1)` on the binary stage and no probability extraction. A statistically correct hurdle point estimate is `P(y>0)·E[y|y>0]`, which requires the binary stage to emit a **probability** in [0,1]. `_resolve_clf_model` returns Darts **classification** models (`XGBClassifierModel`/`LightGBMClassifierModel`) and `_predict_by_step` calls `model.predict(n=...)` with no likelihood parameters — **assumption: Darts classifiers return argmax class labels {0,1} by default**, not probabilities. If so, the product is a **hard gate**: every cell the classifier rounds to 0 contributes exactly 0, discarding sub-threshold probability mass and **systematically under-predicting the mean** on a ~90%-zero target, with no error signal. The binary semantics are also **inconsistent across the family** — Shurf explicitly clips classification to [0,1] (`shurf_model.py:134-136`) while Hurdle does not — suggesting the intended estimator was never pinned. **Distinct from D-24** (that entry concerns the *train-time* `(x>0)` dichotomization being information-lossy and un-benchmarked; this concerns the *predict-time* product's output semantics). Verifiable in minutes: fit a tiny Hurdle and inspect whether the binary predicted column is in {0,1} or [0,1]. Cross-ref **D-24** (dichotomization), **D-22** (MSLE rewards zero-fit/tail-compression — same observable direction), **D-13** (product untested, so this is unguarded), **D-26** (Hurdle transform-centralization deferred). **Story A confirmation (2026-06-13, #78):** the binary stage DOES emit hard `{0,1}` labels — default `predict()` returns integral labels while `predict_likelihood_parameters=True` returns fractional probabilities that the code discards. **But** the real-world magnitude is benign: across the 6 `chunky_bunny` Hurdle constituents (cm `lr_ged_sb`, n=89,388, predicted means cross-checked vs the prediction parquets to 3 s.f.) the magnitude-calibration ratio MCR = ŷ̄/ȳ̄ is **0.75–1.29** (ȳ̄≈28.8) — no net aggregate under-prediction; the hard gate (full magnitude on event cells) and the zero-biased positive stage (D-37) roughly offset. The original "systematic under-prediction" framing was directionally wrong at the aggregate level. **Escalation condition NOT met → de-escalated to Tier 3.** Residual (still open): tail/distributional accuracy is unverified — the hard gate zeroing low-prob/high-magnitude escalation cells is the EWS-dangerous direction and is unmeasured (track under **D-22**/**D-25**). Evidence: `reports/2026-06-13_hurdle_point_estimate_diagnosis/findings.md`. **EXP-01 RE-ESCALATION (2026-06-15, dossier `reports/2026-06-14_hurdle_point_estimator_dossier/`):** the residual tail risk is now **measured and confirmed harmful**. The pre-registered tail readout (`exp01_tail_readout.py`) FALSIFIED "the gate is tail-acceptable": missed-escalation `mean(pred<0.5 | obs>10)` = **0.07–0.32** across the 6 Hurdles vs **0.022** for the plain `log1p` reference (car_radio); per-cell calibration collapses (over-predict small cells, under-predict the extreme tail) while MCR≈1. The aggregate-benign magnitude was two offsetting errors, exactly the Davison/Gneiting risk. The effect survives the untuned-LGBM confound (best XGB hurdle still misses 3× the reference). **Decision:** recommend **Option 1** (binary stage emits `P(Y>0)` + clip → product ≈ `E[Y]`, never hard-zeros an escalation) via a **deferred** ADR/issue (do NOT implement — salvage). Postmortem: `postmortem_exp01_hard_gate_drops_escalations.md`. Cross-ref **D-38** (decision), **D-24** (dichotomization), **D-23** (tuning confound). |
+
+---
+
+### D-34 — `predict` duplicated across StepshifterModel/HurdleModel (four-way CUDA×{eval,forecast} branching) and has already diverged
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When adding a run mode, a new `eval_type`, or a device branch to any model's `predict` — verify that `StepshifterModel.predict`, `HurdleModel.predict`, and `ShurfModel.predict` are all updated consistently (e.g. the inverse-transform step). |
+| **Source** | expert-review (2026-06-13) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/stepshifter.py:220-291` vs `views_stepshifter/models/hurdle_model.py:147-248` (and `shurf_model.py:233-273`) |
+| **Notes** | `HurdleModel.predict` is a ~100-line near-copy of `StepshifterModel.predict` with the same CUDA/CPU × eval/forecast branching, differing only in the combine step (binary×positive) and — critically — in that the base calls `_inverse_transform_predictions` (`stepshifter.py:291`) while Hurdle **omits it**. That divergence is already real (it is why Hurdle must be identity-pinned), demonstrating the duplication actively drifts rather than being a hypothetical smell. A missing Template-Method hook means any control-flow change must be applied across two (three with Shurf) near-identical blocks; a missed site is a silent behavioral split. Mitigation: extract a base `predict` skeleton with a protected `_combine(preds_by_step)` hook; base passes identity-combine+inverse, Hurdle passes the product. **Do not refactor before D-13's point-prediction tests land** (the core is currently unpinned). Cross-ref **D-26** (Hurdle/Shurf deferral), **D-13** (untested core blocks safe refactor). |
+
+---
+
+### D-35 — Diagonal-month temporal arithmetic in `_predict_by_step` has no membership assertion → off-by-one selects the wrong forecast month silently
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When changing partition semantics (`_train_end` / `_test_start` inclusivity) upstream in views-pipeline-core, or editing the `_predict_by_step` slice, verify the selected diagonal forecast month is the intended one and is present in the predicted frame. |
+| **Source** | expert-review (2026-06-13) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/stepshifter.py:152` (`self._train_end + 1 + sequence_number`), `:168-170` (`pred.to_dataframe().loc[[self._test_start + step + sequence_number - 1]]`) |
+| **Notes** | The "diagonal"/last-month-with-data selection encodes a temporal contract as raw `+1`/`-1` index arithmetic spread across two slicing expressions, with **no assertion** that the computed month exists in the predicted frame before `.loc[[...]]`. If the upstream partition boundary semantics shift, the model silently selects a neighbouring month (wrong forecast, no error signal) or raises a bare `KeyError` far from the cause. This is a **guard gap distinct from the test gap in D-13** — D-13 notes the diagonal slice is untested; this asks for a runtime membership assertion plus extraction of the arithmetic into a named, directly-unit-testable `_diagonal_month(step, sequence_number)` helper. Cross-ref **D-13** (diagonal slice untested), **D-11** (predict paths undecorated by `views_validate`). |
+
+---
+
+### D-36 — `HurdleModel.fit` re-pickles the full panel per step into the process pool, has no per-step timeout, and crashes on an all-zero partition
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 |
+| **Trigger** | When running `HurdleModel.fit` on a large PRIO-grid panel (serialization/memory spike), when a Darts `fit` worker hangs (no timeout), or on a training partition where no series has a positive value (`zip(*[])` crash). |
+| **Source** | expert-review (2026-06-13) |
+| **Status** | Open |
+| **Location** | `views_stepshifter/models/hurdle_model.py:116-122` (positive-stage filter + `zip(*[...])`), `:134-144` (per-future `executor.submit(self._fit_by_step, ...)` + blocking `future.result()`); start method set to `spawn` in `views_stepshifter/manager/__init__.py:5` |
+| **Notes** | Each `executor.submit` pickles `self` — which carries `self._series`, `self._target_train`, `self._past_cov` (the full panel) — **plus** the `target_binary`/`target_pos`/`past_cov_pos` lists, once **per step** (e.g. 36×) under `spawn`, an unbounded serialization/memory amplification with no backpressure. There is **no per-step timeout**: a hung Darts `fit` blocks `future.result()` (`:143`) indefinitely, and the only backstop is the pipeline-core 2 h subprocess timeout (D-29) which then aborts the *entire* ensemble run rather than shedding one step. Separately, an **all-zero training partition** makes the positive-stage comprehension (`:116-122`) empty, so `zip(*[])` raises a cryptic `ValueError: not enough values to unpack` with no actionable message. Mitigations: broadcast read-only covariates via a pool `initializer` (or pass only `step`); add a per-step timeout; guard the empty-positive case explicitly. Cross-ref **D-29** (ensemble 2 h timeout aborts whole run), **D-08** (Shurf `fit` mutable-dict in the same fan-out region). |
+
+---
+
+### D-37 — HurdleModel positive stage conditions at the series level, not on `Y>0`, so the binary×positive product is not the hurdle mean `E[Y]`
+
+| Field | Value |
+|---|---|
+| **Tier** | 3 (recalibrated from 2 during Story A, 2026-06-13 — `target_pos` IS zero-dominated as predicted, but real-data aggregate magnitude is benign; residual risk is tail/distributional) |
+| **Trigger** | When benchmarking or "fixing" the HurdleModel point estimator, or before trusting its output as `E[Y]`, compute `mean(target_pos == 0)` on the real training panel and confirm whether the positive stage estimates `E[Y\|Y>0]` or `E[Y\|unit ever positive]`. |
+| **Source** | expert-method-review (2026-06-13); magnitude assessed Story A / #78 (2026-06-13) |
+| **Status** | Open — **mechanism CONFIRMED, aggregate magnitude benign** (Story A / #78, 2026-06-13) |
+| **Location** | `views_stepshifter/models/hurdle_model.py:116-122` (series-level `(t.values() > 0).any()` filter retaining the **full** series, zeros included) vs `:111-113` (observation-level `(x>0)` binary target); product at `:94-97`, `:244-247` |
+| **Notes** | A hurdle mean is `E[Y] = P(Y>0) · E[Y\|Y>0]`. The binary stage estimates `P(Y>0)` per observation, but the positive stage is trained on **entire series that have at least one positive value, zero months included** (`:116-122`), so it estimates `E[Y\|unit ever positive]` — a quantity that *contains the zeros*. The product `P(Y>0) · E[Y\|ever-positive]` is therefore **neither the hurdle mean nor any standard forecast functional**, is biased low, and **double-counts zeros** (a zero month feeds both the binary 0 *and* the positive regressor's training set). The README (`README.md:119-122`) acknowledges the series-level inclusion as a Darts-imposed workaround (continuous timestamps) but not its estimator consequence. This is the implementation-specific root under the symptoms in D-22/D-24. Grounded in Mullahy 1986 (hurdle definition), Croston 1972 / Syntetos–Boylan 2005 (the known intermittent occurrence×size decomposition bias). Verifiable cheaply via the trigger. *Fetch to library: Mullahy1986, Lambert1992, Croston1972/Syntetos-Boylan2005.* Cross-ref **D-33** (label-vs-probability gate — the other way the product fails to be `E[Y]`), **D-24** (dichotomization un-benchmarked vs a single count model), **D-38** (the elicitability framing), **D-26** (Hurdle transform-centralization deferred). **Story A confirmation (2026-06-13, #78):** on an ~87%-zero fixture, `target_pos` came out **~82% zeros** — the mechanism is exactly as described (positive stage trains on whole zero-heavy series → `E[Y\|ever-positive]`, not `E[Y\|Y>0]`). **However**, this does **not** produce net aggregate under-prediction in production: the 6 `chunky_bunny` Hurdle constituents show MCR 0.75–1.29 (the hard gate of D-33 offsets the low-bias). So the estimator is provably not the textbook `E[Y]` but is **magnitude-honest in aggregate** → de-escalated to Tier 3. Residual (open): tail/distributional accuracy unverified (track under **D-22**/**D-25**); the real-data *zero-fraction of `target_pos`* (vs the synthetic ~82%) is still unmeasured. Evidence: `reports/2026-06-13_hurdle_point_estimate_diagnosis/findings.md`. |
+
+---
+
+### D-38 — HurdleModel point estimator targets no forecast functional consistent with the MSLE it is scored on (elicitability mismatch)
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 (structural: the estimator is optimised for a different functional than it is evaluated on → systematic, silent mis-ranking of models/transforms with no error signal) |
+| **Trigger** | When selecting a HurdleModel or `target_transform` on MSLE, or when specifying/altering the positive stage's training loss, confirm the elicited functional (squared error → conditional mean) matches the scoring rule's target (MSLE → ≈ median-of-log) and add a calibration-in-the-large readout to the selection. |
+| **Source** | expert-method-review (2026-06-13) |
+| **Status** | Open — **decision recorded** (EXP-01, 2026-06-15): the tail readout confirms the estimator is mis-targeted in practice → recommend **Option 1 (probability gate)**, deferred to issue **#83** (+ #66). |
+| **Location** | `views_stepshifter/models/hurdle_model.py:94-97`, `:244-247` (product); positive-stage squared-error objective via the Darts regression models (`stepshifter.py:_resolve_reg_model`); MSLE evaluation in the pipeline (views-evaluation) |
+| **Notes** | Per Gneiting (2011) elicitability, a point forecast is meaningful only relative to the functional its loss elicits: squared error elicits the **mean**, absolute error the **median**. The positive stage minimises squared error → conditional **mean**, but the pipeline scores **MSLE** (squared error in log space → ≈ **median of the log**), a *different* functional that diverges sharply on a right-skewed positive part — so even a perfectly fit product is optimised for the wrong target relative to how it is scored, and if the binary stage emits hard labels (D-33) the product elicits **no** functional at all. This is the *mechanism* under the observed symptom in **D-22** (MSLE structurally rewards zero-fit / tail-compression). Mitigation: choose the target functional **from** the scoring rule and fit a loss consistent with it, or evaluate the full predictive distribution with a proper score (CRPS / tail-weighted variants) rather than a point product; always report calibration-in-the-large. Grounded in held library: Gneiting2007, Jordan2019, Bolin2023, Lerch2017 (Forecaster's Dilemma). *Fetch: Harrell RMS, Duan1983 (retransformation/smearing).* Cross-ref **D-22** (the symptom), **D-25** (no prediction-space calibration check), **D-33** (label gate → not even a functional), **D-37** (the conditioning mis-specification). |
+
+---
+
+### D-39 — Device-selected fit/predict path makes dev≠CI execution + a fork-after-CUDA deadlock guarded only by an import side effect
+
+| Field | Value |
+|---|---|
+| **Tier** | 2 (recalibrate to 3 if the determinism facet is judged test-infra-only — see rationale; **not** Tier 1: the failure modes are a *loud* hang and a dev/CI divergence, not silent corruption) |
+| **Trigger** | Before relying on the `ProcessPoolExecutor` (pool) path locally, exercising it in a test, or removing/reordering the `manager/__init__.py` `set_start_method('spawn')` import — build the executor seam (inject the executor + collapse the duplicated product lines) first. |
+| **Source** | expert-review (2026-06-14) |
+| **Status** | Open — remediation = the planned executor-seam refactor |
+| **Location** | `views_stepshifter/models/stepshifter.py` (`get_device_params` → `torch.cuda.is_available()`); `views_stepshifter/models/hurdle_model.py` (predict's CUDA/CPU × eval/forecast branches — the `binary×positive` product duplicated across 4 sites); `views_stepshifter/manager/__init__.py:5` (`set_start_method('spawn')` as an import side effect); `.github/workflows/run_pytest.yml` (CI, no GPU → runs the pool path) |
+| **Notes** | One root cause, three facets (surfaced building Story B's tests, #75): **(1) determinism** — `fit`/`predict` select serial vs `ProcessPoolExecutor` by ambient hardware (`get_device_params()`), so a GPU dev box runs the *serial* path while CI (no GPU) runs the *pool* path. A test asserting on the locally-run path **cannot verify the other path in the same environment** — dev and CI execute different code. **(2) Deadlock** — the pool path defaults to `fork`; forking after CUDA is initialized **hangs** (observed: forcing the CPU path in-process during Story B deadlocked, timing out). The only thing preventing this in production/CI is `manager/__init__.py` setting `spawn` — but **only as an import side effect, and only when that package is imported first**; remove/reorder it and the hang returns. **(3) Duplicated-branch drift** — the `binary×positive` product line is copied across 4 serial/pool predict branches, so the pool branch can silently diverge from the serial branch with **no local test catching it** (the serial branch is all a GPU dev box runs). **Tier rationale:** structural fragility with a concrete, realistic trigger (any contributor testing/running the pool path, or cleaning up the spawn-import) → Tier 2; it is **not** silent model-output corruption (→ not Tier 1), and a reviewer who scopes the determinism facet as test-infrastructure-only could argue Tier 3 (peer: D-36 pool fragility is Tier 3). **Mitigation (planned seam refactor):** collapse the 4 product lines into one method; inject the executor (serial vs pool) so both run in-process under test; make `spawn` **explicit at pool creation**, not an import side effect. Cross-ref **D-34** (predict control-flow duplication — related, distinct: maintainability vs this determinism/deadlock), **D-36** (fit pool resource/timeout — related, distinct), **D-13** (the characterization tests whose local run exposed this). |
+
+---
+
 ## Invalidated Concerns
 
 ### D-01 — Destructive config mutation in `_get_model()` destroys HP dict — INVALIDATED
@@ -347,3 +464,17 @@
 | **Source** | Tech debt audit (2026-04-07); confirmed resolved by repo-assimilation (2026-06-08) |
 | **Status** | Resolved (2026-06-08) |
 | **Resolution** | The dependency is now declared: `pyproject.toml:18` reads `darts = "^0.40.0"` (uncommented), satisfying the five runtime import sites (`stepshifter.py:5`, `stepshifter.py:54,57` lazy, `hurdle_model.py:45` lazy, `darts_model.py:2`). The original entry flagged this as "likely already resolved" pending verification; verified on the 2026-06-08 assimilation audit. |
+
+---
+
+### D-41 — Stepshifter feeds the PRIO-GRID cell id to the regressor as a feature (darts static-covariate default) → outlier cells smeared into latitude-wide "stripes" — RESOLVED
+
+| Field | Value |
+|---|---|
+| **Tier** | 1 |
+| **Trigger** | When forecasting at long lead times, or whenever a single cell carries an extreme target (a real massacre, or a data artifact like the Tigray over-concentration), inspect the PGM map for a horizontal band at that cell's latitude. |
+| **Source** | "Stripe" investigation (2026-06-28); diagnosed and reproduced on the real panel. |
+| **Status** | Resolved (2026-06-28) — fix on branch `fix/stepshifter-static-covariate-id-leak`, PR open to `development` (not yet merged). |
+| **Location** | `views_stepshifter/models/stepshifter.py` — model construction (`_fit_by_step`, the cuda branch of `fit`); root at `_prepare_time_series` (`:127`) `TimeSeries.from_group_dataframe(group_cols=self._level)`. |
+| **Narrative** | `from_group_dataframe` attaches the group key (`priogrid_gid` / `country_id`) as a darts *static covariate*, and darts regression models use static covariates as model features by default (`use_static_covariates=True`). The id is thus fed to XGBoost/LightGBM as a numeric column; the tree splits on it, and because PRIO-GRID ids are row-major (`id=(row-1)*720+col`), the model memorises the id-neighbourhood of any extreme cell and emits an elevated baseline across that whole latitude row — a horizontal "stripe" through empty/desert cells with no data basis. Silent: zero-history, identical-feature cells on the poisoned row forecast many× their neighbours purely by id. **Horizon-dependent** — invisible at step 1, severe at step 36 (covariate signal fades → tree leans on the memorised id), so near-horizon tests miss it. Compounds with the upstream Tigray data artifact (one cell, ~273k deaths) but is **independent** and distorts ANY sharp hotspot, real or artificial. |
+| **Resolution** | `_new_regressor` helper forces `use_static_covariates=False` (overriding any hyperparameter value); the id stays attached only as a *label* for prediction→cell assembly (`_predict_by_step:171`), never as a feature. Verified on the real `caring_fish` panel (full 437-month history): step-36 row-floor 22.6× → 0.87× (flat) with the fix; flat at step 1 either way. Unit tests in `test_stepshifter.py`. **Carry-forward:** removing the feature changes model behaviour (not only the artifact) → retrained models require **skill re-evaluation**, weighting far horizons. The raw id must never be re-enabled as a feature; legitimate spatial signal belongs in real covariates (lat/lon, or a positional encoding). |
