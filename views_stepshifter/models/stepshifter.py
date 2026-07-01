@@ -4,7 +4,7 @@ import pandas as pd
 import logging
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from views_stepshifter.models.validation import views_validate
 from views_stepshifter.infrastructure.transforms import TRANSFORMS
 from views_pipeline_core.managers.model import ForecastingModelManager
@@ -23,14 +23,19 @@ class StepshifterModel:
         self._train_start, self._train_end = partitioner_dict["train"]
         self._test_start, self._test_end = partitioner_dict["test"]
         self._models = {}
+        self._models_by_target: Dict[str, Dict[int, object]] = {}
+        self._series_by_target: Dict[str, List[TimeSeries]] = {}
+        self._target_train_by_target: Dict[str, List[TimeSeries]] = {}
+        self._past_cov_by_target: Dict[str, List[TimeSeries]] = {}
 
         # Multiple targets handling
         if not isinstance(config["targets"], list):
             raise ValueError("Dependent variable must be a list")
-        elif len(config["targets"]) > 1:
-            raise ValueError("Stepshifter only supports one dependent variable")
-        else:
-            self._targets = config["targets"][0]
+        if len(config["targets"]) == 0:
+            raise ValueError("Dependent variable list cannot be empty")
+        self._target_names = config["targets"]
+        # Backward-compatible alias used in downstream tests and subclasses.
+        self._targets = self._target_names[0]
 
         # Declared target-space transform (ADR-003). Only the NAME is stored on the
         # instance (and serialized with the pickled artifact); the forward/inverse
@@ -96,7 +101,9 @@ class StepshifterModel:
         # set up
         self._time = df.index.names[0]
         self._level = df.index.names[1]
-        self._independent_variables = [c for c in df.columns if c != self._targets]
+        self._independent_variables = [
+            c for c in df.columns if c not in self._target_names
+        ]
 
         last_month_id = df.index.get_level_values(self._time).max()
         existing_country_ids = df.loc[last_month_id].index.unique()
@@ -114,29 +121,38 @@ class StepshifterModel:
         # Forward target-space transform, applied exactly once at data-in (ADR-003).
         # Target column only (features are pre-transformed at queryset level); the
         # zero-preserving transforms keep the zero-fill above consistent.
-        df[self._targets] = self._forward(df[self._targets])
+        for target in self._target_names:
+            df[target] = self._forward(df[target])
 
         return df
 
-    def _prepare_time_series(self, df: pd.DataFrame):
+    def _prepare_time_series(
+        self, df: pd.DataFrame, target: Optional[str] = None, store: bool = True
+    ) -> Tuple[List[TimeSeries], List[TimeSeries], List[TimeSeries]]:
         """
         Prepare time series for training and prediction
         """
+        target = target or self._targets
 
         df_reset = df.reset_index(level=[1])
-        self._series = TimeSeries.from_group_dataframe(
+        series = TimeSeries.from_group_dataframe(
             df_reset,
             group_cols=self._level,
-            value_cols=self._independent_variables + [self._targets],
+            value_cols=self._independent_variables + [target],
         )
 
-        self._target_train = [
-            series.slice(self._train_start, self._train_end + 1)[self._targets]
-            for series in self._series
+        target_train = [
+            ts.slice(self._train_start, self._train_end + 1)[target]
+            for ts in series
         ]  # ts.slice is different from df.slice
-        self._past_cov = [
-            series[self._independent_variables] for series in self._series
-        ]
+        past_cov = [ts[self._independent_variables] for ts in series]
+
+        if store:
+            self._series = series
+            self._target_train = target_train
+            self._past_cov = past_cov
+
+        return series, target_train, past_cov
 
     def _new_regressor(self, step: int):
         """Construct a darts regression model for one step-ahead horizon.
@@ -158,27 +174,39 @@ class StepshifterModel:
         reg_kwargs = {**self._reg_params, "use_static_covariates": False}
         return self._reg(lags_past_covariates=[-step], **reg_kwargs)
 
-    def _fit_by_step(self, step):
+    def _fit_by_step(self, step, target_train=None, past_cov=None):
+        target_train = target_train if target_train is not None else self._target_train
+        past_cov = past_cov if past_cov is not None else self._past_cov
         model = self._new_regressor(step)
-        model.fit(self._target_train, past_covariates=self._past_cov)
+        model.fit(target_train, past_covariates=past_cov)
         return model
 
-    def _predict_by_step(self, model, step: int, sequence_number: int):
+    def _predict_by_step(
+        self,
+        model,
+        step: int,
+        sequence_number: int,
+        target: Optional[str] = None,
+        series: Optional[List[TimeSeries]] = None,
+        past_cov: Optional[List[TimeSeries]] = None,
+    ):
         """
         Keep predictions with last-month-with-data, i.e., diagonal prediction
         """
+        target = target or self._targets
+        series = series if series is not None else self._series
+        past_cov = past_cov if past_cov is not None else self._past_cov
+
         # logger.info(f"Starting prediction for step: {step}")
-        target = [
-            series.slice(self._train_start, self._train_end + 1 + sequence_number)[
-                self._targets
-            ]
-            for series in self._series
+        target_history = [
+            ts.slice(self._train_start, self._train_end + 1 + sequence_number)[target]
+            for ts in series
         ]
         ts_pred = model.predict(
             n=step,
-            series=target,
+            series=target_history,
             # darts automatically locates the time period of past_covariates
-            past_covariates=self._past_cov,
+            past_covariates=past_cov,
             show_warnings=False,
         )
 
@@ -197,116 +225,195 @@ class StepshifterModel:
             index=pd.MultiIndex.from_tuples(
                 index_tuples, names=[self._time, self._level]
             ),
-            columns=[f"pred_{self._targets}"],
+            columns=[f"pred_{target}"],
         )
 
         return df_preds.sort_index()
 
-    def _predict_by_sequence(self, sequence_number):
+    def _predict_by_sequence(
+        self,
+        sequence_number,
+        target: Optional[str] = None,
+        models: Optional[Dict[int, object]] = None,
+        series: Optional[List[TimeSeries]] = None,
+        past_cov: Optional[List[TimeSeries]] = None,
+    ):
+        target = target or self._targets
+        models = models if models is not None else self._models
         pred_by_step = []
         for step in self._steps:
-            pred = self._predict_by_step(self._models[step], step, sequence_number)
+            pred = self._predict_by_step(
+                models[step],
+                step,
+                sequence_number,
+                target=target,
+                series=series,
+                past_cov=past_cov,
+            )
             pred_by_step.append(pred)
         return pd.concat(pred_by_step, axis=0).sort_index()
+
+    def _predict_target(self, target: str, run_type: str, eval_type: str):
+        models = self._models_by_target[target]
+        series = self._series_by_target[target]
+        past_cov = self._past_cov_by_target[target]
+
+        if run_type != "forecasting":
+            if eval_type != "standard":
+                raise ValueError(
+                    f"{eval_type} is not supported now. Please use 'standard' evaluation type."
+                )
+
+            total_sequence_number = (
+                ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
+            )
+
+            if self.get_device_params().get("device") == "cuda":
+                preds = []
+                for sequence_number in tqdm.tqdm(
+                    range(total_sequence_number),
+                    desc=f"Predicting {target} for sequence number",
+                ):
+                    preds.append(
+                        self._predict_by_sequence(
+                            sequence_number,
+                            target=target,
+                            models=models,
+                            series=series,
+                            past_cov=past_cov,
+                        )
+                    )
+            else:
+                preds = [None] * total_sequence_number
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        executor.submit(
+                            self._predict_by_sequence,
+                            sequence_number,
+                            target,
+                            models,
+                            series,
+                            past_cov,
+                        ): sequence_number
+                        for sequence_number in range(total_sequence_number)
+                    }
+
+                    for future in tqdm.tqdm(
+                        as_completed(futures.keys()),
+                        desc=f"Predicting {target} for sequence number",
+                        total=len(futures),
+                    ):
+                        sequence_number = futures[future]
+                        preds[sequence_number] = future.result()
+            return preds
+
+        if self.get_device_params().get("device") == "cuda":
+            preds = []
+            for step in tqdm.tqdm(self._steps, desc=f"Predicting {target} for steps"):
+                preds.append(
+                    self._predict_by_step(
+                        models[step],
+                        step,
+                        0,
+                        target=target,
+                        series=series,
+                        past_cov=past_cov,
+                    )
+                )
+            return pd.concat(preds, axis=0).sort_index()
+
+        with ProcessPoolExecutor() as executor:
+            futures = {
+                step: executor.submit(
+                    self._predict_by_step,
+                    models[step],
+                    step,
+                    0,
+                    target,
+                    series,
+                    past_cov,
+                )
+                for step in self._steps
+            }
+            preds_by_step = [
+                future.result()
+                for future in tqdm.tqdm(
+                    as_completed(futures.values()),
+                    desc=f"Predicting {target} outcomes",
+                    total=len(futures),
+                )
+            ]
+
+        return pd.concat(preds_by_step, axis=0).sort_index()
 
     @views_validate
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
-        self._prepare_time_series(df)
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
-        models = {}
-        if self.get_device_params().get("device") == "cuda":
-            for step in tqdm.tqdm(
-                self._steps, desc="Fitting model for step", leave=True
-            ):
-                model = self._new_regressor(step)
-                model.fit(self._target_train,
-                            past_covariates=self._past_cov) # Darts will automatically ignore the parts of past_covariates that go beyond the training period
-                self._models[step] = model
-        else:
-            with ProcessPoolExecutor() as executor:
-                futures = {
-                    executor.submit(self._fit_by_step, step): step for step in self._steps
-                }
-                for future in tqdm.tqdm(
-                    futures.keys(), desc="Fitting models for steps", total=len(futures)
+        self._models_by_target = {}
+        self._series_by_target = {}
+        self._target_train_by_target = {}
+        self._past_cov_by_target = {}
+
+        for target in self._target_names:
+            series, target_train, past_cov = self._prepare_time_series(df, target)
+            self._series_by_target[target] = series
+            self._target_train_by_target[target] = target_train
+            self._past_cov_by_target[target] = past_cov
+
+            target_models = {}
+            if self.get_device_params().get("device") == "cuda":
+                for step in tqdm.tqdm(
+                    self._steps, desc=f"Fitting {target} model for step", leave=True
                 ):
-                    step = futures[future]
-                    models[step] = future.result()
-                self._models = models  # Use local variable to avoid concurrent execution issues
+                    model = self._new_regressor(step)
+                    model.fit(
+                        target_train,
+                        past_covariates=past_cov,
+                    )
+                    target_models[step] = model
+            else:
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        executor.submit(self._fit_by_step, step, target_train, past_cov): step
+                        for step in self._steps
+                    }
+                    for future in tqdm.tqdm(
+                        futures.keys(),
+                        desc=f"Fitting {target} models for steps",
+                        total=len(futures),
+                    ):
+                        step = futures[future]
+                        target_models[step] = future.result()
+
+            self._models_by_target[target] = target_models
+
+        if len(self._target_names) == 1:
+            self._models = self._models_by_target[self._targets]
+
         self.is_fitted_ = True
 
     def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
         check_is_fitted(self, "is_fitted_")
 
+        per_target = {
+            target: self._predict_target(target, run_type, eval_type)
+            for target in self._target_names
+        }
+
         if run_type != "forecasting":
-
-            if eval_type == "standard":
-                total_sequence_number = (
-                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
-                )
-
-                if self.get_device_params().get("device") == "cuda":
-                    preds = []
-                    for sequence_number in tqdm.tqdm(
-                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                        desc="Predicting for sequence number",
-                    ):
-                        pred_by_step = [
-                            self._predict_by_step(self._models[step], step, sequence_number)
-                            for step in self._steps
-                        ]
-                        pred = pd.concat(pred_by_step, axis=0)
-                        preds.append(pred)
-                else:
-                    preds = [None] * total_sequence_number
-                    with ProcessPoolExecutor() as executor:
-                        futures = {
-                            executor.submit(
-                                self._predict_by_sequence, sequence_number
-                            ): sequence_number
-                            for sequence_number in range(total_sequence_number)
-                        }
-
-                        for future in tqdm.tqdm(
-                            as_completed(futures.keys()),
-                            desc="Predicting for sequence number",
-                            total=len(futures),
-                        ):
-                            sequence_number = futures[future]
-                            preds[sequence_number] = future.result()
-            else:
-                raise ValueError(
-                    f"{eval_type} is not supported now. Please use 'standard' evaluation type."
-                )
-
+            total_sequence_number = len(next(iter(per_target.values())))
+            preds = []
+            for sequence_number in range(total_sequence_number):
+                frames = [
+                    per_target[target][sequence_number] for target in self._target_names
+                ]
+                preds.append(pd.concat(frames, axis=1).sort_index())
         else:
-
-            if self.get_device_params().get("device") == "cuda":
-                preds = []
-                for step in tqdm.tqdm(self._steps, desc="Predicting for steps"):
-                    preds.append(self._predict_by_step(self._models[step], step, 0))
-                preds = pd.concat(preds, axis=0).sort_index()
-                
-            else:
-                with ProcessPoolExecutor() as executor:
-                    futures = {
-                        step: executor.submit(
-                            self._predict_by_step, self._models[step], step, 0
-                        )
-                        for step in self._steps
-                    }
-                    preds_by_step = [
-                        future.result()
-                        for future in tqdm.tqdm(
-                            as_completed(futures.values()),
-                            desc="Predicting outcomes",
-                            total=len(futures),
-                        )
-                    ]
-
-                preds = pd.concat(preds_by_step, axis=0).sort_index()
+            preds = pd.concat(
+                [per_target[target] for target in self._target_names], axis=1
+            ).sort_index()
 
         return self._inverse_transform_predictions(preds)
 
@@ -314,10 +421,12 @@ class StepshifterModel:
         """Inverse target-space transform, applied exactly once at the model's output
         boundary (ADR-003). Handles both the calibration list-of-frames and the single
         forecasting frame. For identity this is a no-op."""
-        col = f"pred_{self._targets}"
         frames = preds if isinstance(preds, list) else [preds]
         for frame in frames:
-            frame[col] = self._inverse(frame[col])
+            for target in self._target_names:
+                col = f"pred_{target}"
+                if col in frame.columns:
+                    frame[col] = self._inverse(frame[col])
         return preds
 
     def save(self, path: str):
@@ -330,7 +439,12 @@ class StepshifterModel:
 
     @property
     def models(self):
-        return list(self._models.values())
+        if len(self._target_names) == 1:
+            return list(self._models_by_target[self._targets].values())
+        return {
+            target: list(target_models.values())
+            for target, target_models in self._models_by_target.items()
+        }
 
     @property
     def steps(self):
@@ -338,7 +452,7 @@ class StepshifterModel:
 
     @property
     def targets(self):
-        return self._targets
+        return self._target_names
 
     @property
     def _forward(self):

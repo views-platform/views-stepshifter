@@ -19,6 +19,7 @@ class ShurfModel(HurdleModel):
         self._reg_params = params["reg"]
 
         self._submodel_list = []
+        self._submodel_list_by_target = {}
         self._submodels_to_train = config["submodels_to_train"]
         self._log_target = config["log_target"]
         self._pred_samples = config["pred_samples"]
@@ -36,39 +37,58 @@ class ShurfModel(HurdleModel):
         sampling in ``predict_sequence``.
         """
         df = self._process_data(df)
-        self._prepare_time_series(df)
         self._clf = self._resolve_clf_model(self._config["model_clf"])
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
-        target_binary = [
-            s.map(lambda x: (x > 0).astype(float)) for s in self._target_train
-        ]
+        self._series_by_target = {}
+        self._target_train_by_target = {}
+        self._past_cov_by_target = {}
+        self._submodel_list_by_target = {}
 
-        target_pos, past_cov_pos = zip(
-            *[
+        for target in self._target_names:
+            series, target_train, past_cov = self._prepare_time_series(df, target)
+            self._series_by_target[target] = series
+            self._target_train_by_target[target] = target_train
+            self._past_cov_by_target[target] = past_cov
+
+            target_binary = [
+                s.map(lambda x: (x > 0).astype(float)) for s in target_train
+            ]
+
+            positive_pairs = [
                 (t, p)
-                for t, p in zip(self._target_train, self._past_cov)
+                for t, p in zip(target_train, past_cov)
                 if (t.values() > 0).any()
             ]
-        )
+            if positive_pairs:
+                target_pos, past_cov_pos = zip(*positive_pairs)
+            else:
+                target_pos, past_cov_pos = tuple(target_train), tuple(past_cov)
 
-        for i in tqdm(range(self._submodels_to_train), desc="Training submodel"):
+            submodel_list = []
+            for i in tqdm(
+                range(self._submodels_to_train),
+                desc=f"Training submodel for {target}",
+            ):
+                submodel_models = {}
+                for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
+                    binary_model = self._new_classifier(step)
+                    binary_model.fit(target_binary, past_covariates=past_cov)
 
-            for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
-                # Fit binary-like stage using a regression model, but the target is binary (0 or 1)
-                binary_model = self._new_classifier(step)
-                binary_model.fit(target_binary, past_covariates=self._past_cov)
+                    positive_model = self._new_regressor(step)
+                    positive_model.fit(target_pos, past_covariates=past_cov_pos)
+                    submodel_models[step] = (binary_model, positive_model)
 
-                # Fit positive stage using the regression model
-                positive_model = self._new_regressor(step)
-                positive_model.fit(target_pos, past_covariates=past_cov_pos)
-                self._models[step] = (binary_model, positive_model)
+                submodel_list.append(submodel_models)
 
-            self._submodel_list.append(self._models)
+            self._submodel_list_by_target[target] = submodel_list
+
+        if len(self._target_names) == 1:
+            self._submodel_list = self._submodel_list_by_target[self._targets]
 
         self.is_fitted_ = True
 
-    def predict_sequence(self, sequence_number) -> pd.DataFrame:
+    def predict_sequence(self, sequence_number, target=None) -> pd.DataFrame:
         """
         Predicts n draws of outcomes based on the provided DataFrame .
 
@@ -93,29 +113,47 @@ class ShurfModel(HurdleModel):
             The final predictions as a DataFrame.
         """
 
-        final_preds = []  
+        target = target or self._targets
+        final_preds = []
         submodel_number = 0
+        submodels = self._submodel_list_by_target.get(target, self._submodel_list)
+        series = self._series_by_target[target]
+        past_cov = self._past_cov_by_target[target]
 
         for submodel in tqdm(
-            self._submodel_list, desc="Predicting submodel number", leave=True
+            submodels, desc=f"Predicting submodel number for {target}", leave=True
         ):
             pred_by_step_binary = [
-                self._predict_by_step(submodel[step][0], step, sequence_number)
+                self._predict_by_step(
+                    submodel[step][0],
+                    step,
+                    sequence_number,
+                    target=target,
+                    series=series,
+                    past_cov=past_cov,
+                )
                 for step in self._steps
             ]
             pred_by_step_positive = [
-                self._predict_by_step(submodel[step][1], step, sequence_number)
+                self._predict_by_step(
+                    submodel[step][1],
+                    step,
+                    sequence_number,
+                    target=target,
+                    series=series,
+                    past_cov=past_cov,
+                )
                 for step in self._steps
             ]
 
             pred_concat_binary = pd.concat(pred_by_step_binary, axis=0)
 
             pred_concat_binary.rename(
-                columns={f"pred_{self._targets}": "Classification"}, inplace=True
+                columns={f"pred_{target}": "Classification"}, inplace=True
             )
             pred_concat_positive = pd.concat(pred_by_step_positive, axis=0)
             pred_concat_positive.rename(
-                columns={f"pred_{self._targets}": "Regression"}, inplace=True
+                columns={f"pred_{target}": "Regression"}, inplace=True
             )
             pred_concat = pd.concat([pred_concat_binary, pred_concat_positive], axis=1)
             pred_concat["submodel"] = submodel_number
@@ -198,7 +236,7 @@ class ShurfModel(HurdleModel):
         )
 
         # Column for the main prediction:
-        pred_col_name = "pred_" + self._targets
+        pred_col_name = f"pred_{target}"
         final_preds_full[pred_col_name] = final_preds_full["Prediction"]
 
         # NOTE: `pred_col_name` (above) is the raw-space output — the per-submodel
@@ -219,7 +257,7 @@ class ShurfModel(HurdleModel):
             inplace=True,
         )
         final_preds = pd.DataFrame(
-            final_preds_full.groupby(["month_id", "country_id"])[pred_col_name].apply(
+            final_preds_full.groupby([self._time, self._level])[pred_col_name].apply(
                 list
             )
         )
@@ -248,22 +286,40 @@ class ShurfModel(HurdleModel):
         check_is_fitted(self, "is_fitted_")
 
         if run_type != "forecasting":
-            preds = []
-            if eval_type == "standard":
-                for sequence_number in tqdm(
-                    range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                    desc="Predicting for sequence number",
-                    leave=True,
-                ):
-                    temp_preds_full = self.predict_sequence(sequence_number)
-                    preds.append(temp_preds_full)
-            else:
+            if eval_type != "standard":
                 raise ValueError(
                     f"{eval_type} is not supported now. Please use 'standard' evaluation type."
                 )
 
-        else:
-            sequence_number = 0
-            preds = self.predict_sequence(sequence_number)
+            total_sequence_number = ForecastingModelManager._resolve_evaluation_sequence_number(
+                eval_type
+            )
+            per_target_preds = {
+                target: [] for target in self._target_names
+            }
 
-        return preds
+            for sequence_number in tqdm(
+                range(total_sequence_number),
+                desc="Predicting for sequence number",
+                leave=True,
+            ):
+                for target in self._target_names:
+                    per_target_preds[target].append(
+                        self.predict_sequence(sequence_number, target=target)
+                    )
+
+            preds = []
+            for sequence_number in range(total_sequence_number):
+                frames = [
+                    per_target_preds[target][sequence_number]
+                    for target in self._target_names
+                ]
+                preds.append(pd.concat(frames, axis=1).sort_index())
+            return preds
+
+        sequence_number = 0
+        frames = [
+            self.predict_sequence(sequence_number, target=target)
+            for target in self._target_names
+        ]
+        return pd.concat(frames, axis=1).sort_index()

@@ -90,17 +90,40 @@ class HurdleModel(StepshifterModel):
 
         return (binary_model, positive_model)
     
-    def _predict_by_sequence(self, sequence_number):
+    def _predict_by_sequence(
+        self,
+        sequence_number,
+        target=None,
+        models=None,
+        series=None,
+        past_cov=None,
+    ):
+        target = target or self._targets
+        models = models if models is not None else self._models
         pred_by_step_binary = []
         pred_by_step_positive = []
         
         for step in self._steps:
             # Predict for binary model
-            pred_binary = self._predict_by_step(self._models[step][0], step, sequence_number)
+            pred_binary = self._predict_by_step(
+                models[step][0],
+                step,
+                sequence_number,
+                target=target,
+                series=series,
+                past_cov=past_cov,
+            )
             pred_by_step_binary.append(pred_binary)
             
             # Predict for positive model
-            pred_positive = self._predict_by_step(self._models[step][1], step, sequence_number)
+            pred_positive = self._predict_by_step(
+                models[step][1],
+                step,
+                sequence_number,
+                target=target,
+                series=series,
+                past_cov=past_cov,
+            )
             pred_by_step_positive.append(pred_positive)
         
         final_pred = (
@@ -113,148 +136,229 @@ class HurdleModel(StepshifterModel):
     @views_validate
     def fit(self, df: pd.DataFrame):
         df = self._process_data(df)
-        self._prepare_time_series(df)
         self._clf = self._resolve_clf_model(self._config["model_clf"])
         self._reg = self._resolve_reg_model(self._config["model_reg"])
 
-        # Binary outcome (event/no-event)
-        # According to the DARTS doc, if timeseries uses a numeric type different from np.float32 or np.float64, not all functionalities may work properly.
-        # So use astype(float) instead of astype(int) (we should have binary outputs 0,1 though)
-        target_binary = [
-            s.map(lambda x: (x > 0).astype(float)) for s in self._target_train
-        ]
+        self._models_by_target = {}
+        self._series_by_target = {}
+        self._target_train_by_target = {}
+        self._past_cov_by_target = {}
 
-        # Positive outcome (for cases where target > 0)
-        target_pos, past_cov_pos = zip(
-            *[
+        for target in self._target_names:
+            series, target_train, past_cov = self._prepare_time_series(df, target)
+            self._series_by_target[target] = series
+            self._target_train_by_target[target] = target_train
+            self._past_cov_by_target[target] = past_cov
+
+            # Binary outcome (event/no-event)
+            # According to the DARTS doc, if timeseries uses a numeric type different
+            # from np.float32 or np.float64, not all functionalities may work properly.
+            target_binary = [
+                s.map(lambda x: (x > 0).astype(float)) for s in target_train
+            ]
+
+            # Positive outcome (for cases where target > 0)
+            positive_pairs = [
                 (t, p)
-                for t, p in zip(self._target_train, self._past_cov)
+                for t, p in zip(target_train, past_cov)
                 if (t.values() > 0).any()
             ]
-        )
+            if positive_pairs:
+                target_pos, past_cov_pos = zip(*positive_pairs)
+            else:
+                # Defensive fallback: if all series are zero, keep shape contract.
+                target_pos, past_cov_pos = tuple(target_train), tuple(past_cov)
 
-        if self.get_device_params().get("device") == "cuda":
-            for step in tqdm.tqdm(self._steps, desc="Fitting model for step", leave=True):
-                # Fit binary-like stage using a classification model, but the target is binary (0 or 1)
-                binary_model = self._new_classifier(step)
-                binary_model.fit(target_binary, past_covariates=self._past_cov)
+            target_models = {}
+            if self.get_device_params().get("device") == "cuda":
+                for step in tqdm.tqdm(
+                    self._steps,
+                    desc=f"Fitting {target} model for step",
+                    leave=True,
+                ):
+                    binary_model = self._new_classifier(step)
+                    binary_model.fit(target_binary, past_covariates=past_cov)
 
-                # Fit positive stage using the regression model
-                positive_model = self._new_regressor(step)
-                positive_model.fit(target_pos, past_covariates=past_cov_pos)
-                self._models[step] = (binary_model, positive_model)
-        else:
-            models = {}
-            with ProcessPoolExecutor() as executor:
-                futures = {
-                    executor.submit(self._fit_by_step, step, target_binary, target_pos, past_cov_pos): step
-                    for step in self._steps
-                }
-                for future in tqdm.tqdm(as_completed(futures.keys()), desc="Fitting models for steps", total=len(futures)):
-                    step = futures[future]
-                    models[step] = future.result()
-            self._models = models
+                    positive_model = self._new_regressor(step)
+                    positive_model.fit(target_pos, past_covariates=past_cov_pos)
+                    target_models[step] = (binary_model, positive_model)
+            else:
+                with ProcessPoolExecutor() as executor:
+                    futures = {
+                        executor.submit(
+                            self._fit_by_step,
+                            step,
+                            target_binary,
+                            target_pos,
+                            past_cov_pos,
+                        ): step
+                        for step in self._steps
+                    }
+                    for future in tqdm.tqdm(
+                        as_completed(futures.keys()),
+                        desc=f"Fitting {target} models for steps",
+                        total=len(futures),
+                    ):
+                        step = futures[future]
+                        target_models[step] = future.result()
+
+            self._models_by_target[target] = target_models
+
+        if len(self._target_names) == 1:
+            self._models = self._models_by_target[self._targets]
         self.is_fitted_ = True
 
-    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
-        check_is_fitted(self, "is_fitted_")
+    def _predict_target(self, target: str, run_type: str, eval_type: str):
+        models = self._models_by_target[target]
+        series = self._series_by_target[target]
+        past_cov = self._past_cov_by_target[target]
 
         if run_type != "forecasting":
-
-            if eval_type == "standard":
-                total_sequence_number = (
-                    ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
-                )
-                if self.get_device_params().get("device") == "cuda":
-                    preds = []
-                    for sequence_number in tqdm.tqdm(
-                        range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)),
-                        desc="Predicting for sequence number",
-                    ):
-                        pred_by_step_binary = [
-                            self._predict_by_step(
-                                self._models[step][0], step, sequence_number
-                            )
-                            for step in self._steps
-                        ]
-                        pred_by_step_positive = [
-                            self._predict_by_step(
-                                self._models[step][1], step, sequence_number
-                            )
-                            for step in self._steps
-                        ]
-                        pred = pd.concat(pred_by_step_binary, axis=0) * pd.concat(pred_by_step_positive, axis=0)
-                        preds.append(pred)
-
-                else:
-                    preds = [None] * total_sequence_number
-                    with ProcessPoolExecutor() as executor:
-                        futures = {
-                            executor.submit(self._predict_by_sequence, sequence_number): sequence_number
-                            for sequence_number in range(ForecastingModelManager._resolve_evaluation_sequence_number(eval_type))
-                        }
-                        for future in tqdm.tqdm(
-                            as_completed(futures.keys()),
-                            desc="Predicting for sequence number",
-                            total=len(futures),
-                        ):
-                            sequence_number = futures[future]
-                            preds[sequence_number] = future.result()
-            else:
+            if eval_type != "standard":
                 raise ValueError(
                     f"{eval_type} is not supported now. Please use 'standard' evaluation type."
                 )
 
-        else:
+            total_sequence_number = (
+                ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
+            )
             if self.get_device_params().get("device") == "cuda":
-                pred_by_step_binary = []
-                pred_by_step_positive = []
-                for step in tqdm.tqdm(self._steps, desc="Predicting for step", total=len(self._steps)):
-                    pred_by_step_binary.append(
-                        self._predict_by_step(self._models[step][0], step, 0)
+                preds = []
+                for sequence_number in tqdm.tqdm(
+                    range(total_sequence_number),
+                    desc=f"Predicting {target} for sequence number",
+                ):
+                    preds.append(
+                        self._predict_by_sequence(
+                            sequence_number,
+                            target=target,
+                            models=models,
+                            series=series,
+                            past_cov=past_cov,
+                        )
                     )
-                    pred_by_step_positive.append(
-                        self._predict_by_step(self._models[step][1], step, 0)
-                    )
-                
-                preds = pd.concat(pred_by_step_binary, axis=0) * pd.concat(
-                    pred_by_step_positive, axis=0
-                )
-  
             else:
+                preds = [None] * total_sequence_number
                 with ProcessPoolExecutor() as executor:
-                    futures_binary = {
-                        step: executor.submit(
-                            self._predict_by_step, self._models[step][0], step, 0
-                        )
-                        for step in self._steps
+                    futures = {
+                        executor.submit(
+                            self._predict_by_sequence,
+                            sequence_number,
+                            target,
+                            models,
+                            series,
+                            past_cov,
+                        ): sequence_number
+                        for sequence_number in range(total_sequence_number)
                     }
-                    futures_positive = {
-                        step: executor.submit(
-                            self._predict_by_step, self._models[step][1], step, 0
-                        )
-                        for step in self._steps
-                    }
+                    for future in tqdm.tqdm(
+                        as_completed(futures.keys()),
+                        desc=f"Predicting {target} for sequence number",
+                        total=len(futures),
+                    ):
+                        sequence_number = futures[future]
+                        preds[sequence_number] = future.result()
+            return preds
 
-                    pred_by_step_binary = [
-                        future.result()
-                        for future in tqdm.tqdm(
-                            as_completed(futures_binary.values()),
-                            desc="Predicting binary outcomes",
-                            total=len(futures_binary),
-                        )
-                    ]
-                    pred_by_step_positive = [
-                        future.result()
-                        for future in tqdm.tqdm(
-                            as_completed(futures_positive.values()),
-                            desc="Predicting positive outcomes",
-                            total=len(futures_positive),
-                        )
-                    ]
-
-                    preds = (
-                        pd.concat(pred_by_step_binary, axis=0).sort_index()
-                        * pd.concat(pred_by_step_positive, axis=0).sort_index()
+        if self.get_device_params().get("device") == "cuda":
+            pred_by_step_binary = []
+            pred_by_step_positive = []
+            for step in tqdm.tqdm(
+                self._steps,
+                desc=f"Predicting {target} for step",
+                total=len(self._steps),
+            ):
+                pred_by_step_binary.append(
+                    self._predict_by_step(
+                        models[step][0],
+                        step,
+                        0,
+                        target=target,
+                        series=series,
+                        past_cov=past_cov,
                     )
-        return preds
+                )
+                pred_by_step_positive.append(
+                    self._predict_by_step(
+                        models[step][1],
+                        step,
+                        0,
+                        target=target,
+                        series=series,
+                        past_cov=past_cov,
+                    )
+                )
+
+            return pd.concat(pred_by_step_binary, axis=0) * pd.concat(
+                pred_by_step_positive, axis=0
+            )
+
+        with ProcessPoolExecutor() as executor:
+            futures_binary = {
+                step: executor.submit(
+                    self._predict_by_step,
+                    models[step][0],
+                    step,
+                    0,
+                    target,
+                    series,
+                    past_cov,
+                )
+                for step in self._steps
+            }
+            futures_positive = {
+                step: executor.submit(
+                    self._predict_by_step,
+                    models[step][1],
+                    step,
+                    0,
+                    target,
+                    series,
+                    past_cov,
+                )
+                for step in self._steps
+            }
+
+            pred_by_step_binary = [
+                future.result()
+                for future in tqdm.tqdm(
+                    as_completed(futures_binary.values()),
+                    desc=f"Predicting {target} binary outcomes",
+                    total=len(futures_binary),
+                )
+            ]
+            pred_by_step_positive = [
+                future.result()
+                for future in tqdm.tqdm(
+                    as_completed(futures_positive.values()),
+                    desc=f"Predicting {target} positive outcomes",
+                    total=len(futures_positive),
+                )
+            ]
+
+        return (
+            pd.concat(pred_by_step_binary, axis=0).sort_index()
+            * pd.concat(pred_by_step_positive, axis=0).sort_index()
+        )
+
+    def predict(self, run_type: str, eval_type: str = "standard") -> pd.DataFrame:
+        check_is_fitted(self, "is_fitted_")
+
+        per_target = {
+            target: self._predict_target(target, run_type, eval_type)
+            for target in self._target_names
+        }
+
+        if run_type != "forecasting":
+            total_sequence_number = len(next(iter(per_target.values())))
+            preds = []
+            for sequence_number in range(total_sequence_number):
+                frames = [
+                    per_target[target][sequence_number] for target in self._target_names
+                ]
+                preds.append(pd.concat(frames, axis=1).sort_index())
+            return preds
+
+        return pd.concat(
+            [per_target[target] for target in self._target_names], axis=1
+        ).sort_index()
