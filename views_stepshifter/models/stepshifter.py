@@ -2,6 +2,8 @@ import pickle
 import numpy as np
 import pandas as pd
 import logging
+import warnings
+from contextlib import contextmanager
 from darts import TimeSeries
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict, Optional, Tuple
@@ -56,6 +58,24 @@ class StepshifterModel:
             return {"device": "mps"}
         else:
             return {}
+
+    @staticmethod
+    @contextmanager
+    def _suppress_lgbm_feature_name_warning():
+        """Suppress sklearn's known LightGBM feature-name mismatch warning.
+
+        Darts may fit with feature names and infer with unnamed arrays depending on
+        internal path, which triggers this warning although predictions are valid.
+        Keep suppression narrow to the exact warning/message.
+        """
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"X does not have valid feature names, but LGBM(Classifier|Regressor) was fitted with feature names",
+                category=UserWarning,
+                module=r"sklearn\\.utils\\.validation",
+            )
+            yield
 
     def _resolve_reg_model(self, func_name: str):
         """
@@ -202,13 +222,14 @@ class StepshifterModel:
             ts.slice(self._train_start, self._train_end + 1 + sequence_number)[target]
             for ts in series
         ]
-        ts_pred = model.predict(
-            n=step,
-            series=target_history,
-            # darts automatically locates the time period of past_covariates
-            past_covariates=past_cov,
-            show_warnings=False,
-        )
+        with self._suppress_lgbm_feature_name_warning():
+            ts_pred = model.predict(
+                n=step,
+                series=target_history,
+                # darts automatically locates the time period of past_covariates
+                past_covariates=past_cov,
+                show_warnings=False,
+            )
 
         # process the predictions
         index_tuples, df_list = [], []
