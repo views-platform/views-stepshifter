@@ -26,6 +26,21 @@ class ShurfModel(HurdleModel):
         self._draw_dist = config["draw_dist"]
         self._draw_sigma = config["draw_sigma"]
 
+    def _inverse_transform_predictions(self, preds):
+        """Inverse target-space transform for Shurf's list-valued predictions."""
+        frames = preds if isinstance(preds, list) else [preds]
+        for frame in frames:
+            for target in self._target_names:
+                col = f"pred_{target}"
+                if col not in frame.columns:
+                    continue
+                frame[col] = frame[col].apply(
+                    lambda v: self._inverse(np.asarray(v)).tolist()
+                    if isinstance(v, (list, tuple, np.ndarray))
+                    else self._inverse(v)
+                )
+        return preds
+
     @views_validate
     def fit(self, df: pd.DataFrame):
         """
@@ -315,11 +330,12 @@ class ShurfModel(HurdleModel):
                     for target in self._target_names
                 ]
                 preds.append(pd.concat(frames, axis=1).sort_index())
-            return preds
+            return self._inverse_transform_predictions(preds)
 
         sequence_number = 0
         frames = [
             self.predict_sequence(sequence_number, target=target)
             for target in self._target_names
         ]
-        return pd.concat(frames, axis=1).sort_index()
+        preds = pd.concat(frames, axis=1).sort_index()
+        return self._inverse_transform_predictions(preds)

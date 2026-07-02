@@ -71,9 +71,8 @@ class StepshifterModel:
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
-                message=r"X does not have valid feature names, but LGBM(Classifier|Regressor) was fitted with feature names",
+                message=r"X does not have valid feature names, but LGBM(?:Classifier|Regressor) was fitted with feature names",
                 category=UserWarning,
-                module=r"sklearn\\.utils\\.validation",
             )
             yield
 
