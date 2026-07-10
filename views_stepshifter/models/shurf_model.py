@@ -6,9 +6,24 @@ import pandas as pd
 from typing import List, Dict
 import numpy as np
 import logging
+import os
+import sys
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
+
+
+def _parallel_worker(model_instance, seq, target):
+    """Standalone worker function that ProcessPoolExecutor can easily serialize."""
+    # print(f"[Core PID {os.getpid()}] -> Claimed Target: '{target}' | Sequence: {seq}...", flush=True)
+    # sys.stdout.flush()
+    
+    result = model_instance.predict_sequence(seq, target=target)
+    
+    # print(f"[Core PID {os.getpid()}] -> COMPLETED Target: '{target}' | Sequence: {seq}", flush=True)
+    # sys.stdout.flush()
+    return result
 
 
 class ShurfModel(HurdleModel):
@@ -35,9 +50,11 @@ class ShurfModel(HurdleModel):
                 if col not in frame.columns:
                     continue
                 frame[col] = frame[col].apply(
-                    lambda v: self._inverse(np.asarray(v)).tolist()
-                    if isinstance(v, (list, tuple, np.ndarray))
-                    else self._inverse(v)
+                    lambda v: (
+                        self._inverse(np.asarray(v)).tolist()
+                        if isinstance(v, (list, tuple, np.ndarray))
+                        else self._inverse(v)
+                    )
                 )
         return preds
 
@@ -71,9 +88,7 @@ class ShurfModel(HurdleModel):
             ]
 
             positive_pairs = [
-                (t, p)
-                for t, p in zip(target_train, past_cov)
-                if (t.values() > 0).any()
+                (t, p) for t, p in zip(target_train, past_cov) if (t.values() > 0).any()
             ]
             if positive_pairs:
                 target_pos, past_cov_pos = zip(*positive_pairs)
@@ -86,7 +101,9 @@ class ShurfModel(HurdleModel):
                 desc=f"Training submodel for {target}",
             ):
                 submodel_models = {}
-                for step in tqdm(self._steps, desc=f"Steps for submodel {i+1}"):
+                for (
+                    step
+                ) in self._steps:  # Remove tqdm here to avoid nested tqdm for speed
                     binary_model = self._new_classifier(step)
                     binary_model.fit(target_binary, past_covariates=past_cov)
 
@@ -130,14 +147,11 @@ class ShurfModel(HurdleModel):
 
         target = target or self._targets
         final_preds = []
-        submodel_number = 0
         submodels = self._submodel_list_by_target.get(target, self._submodel_list)
         series = self._series_by_target[target]
         past_cov = self._past_cov_by_target[target]
 
-        for submodel in tqdm(
-            submodels, desc=f"Predicting submodel number for {target}", leave=True
-        ):
+        for submodel_number, submodel in enumerate(submodels):
             pred_by_step_binary = [
                 self._predict_by_step(
                     submodel[step][0],
@@ -174,7 +188,6 @@ class ShurfModel(HurdleModel):
             pred_concat["submodel"] = submodel_number
 
             final_preds.append(pred_concat)
-            submodel_number += 1
 
         final_preds_aslists = pd.concat(final_preds, axis=0)
 
@@ -306,22 +319,41 @@ class ShurfModel(HurdleModel):
                     f"{eval_type} is not supported now. Please use 'standard' evaluation type."
                 )
 
-            total_sequence_number = ForecastingModelManager._resolve_evaluation_sequence_number(
-                eval_type
+            total_sequence_number = (
+                ForecastingModelManager._resolve_evaluation_sequence_number(eval_type)
             )
-            per_target_preds = {
-                target: [] for target in self._target_names
-            }
 
-            for sequence_number in tqdm(
-                range(total_sequence_number),
-                desc="Predicting for sequence number",
-                leave=True,
-            ):
-                for target in self._target_names:
-                    per_target_preds[target].append(
-                        self.predict_sequence(sequence_number, target=target)
-                    )
+            tasks = [
+                (seq, target)
+                for seq in range(total_sequence_number)
+                for target in self._target_names
+            ]
+            per_target_preds = {
+                target: [None] * total_sequence_number for target in self._target_names
+            }
+            with ProcessPoolExecutor(
+                max_workers=min(len(tasks), os.cpu_count())
+            ) as executor:
+                futures = {
+                    executor.submit(_parallel_worker, self, seq, target): (seq, target)
+                    for seq, target in tasks
+                }
+
+                for future in tqdm(
+                    as_completed(futures),
+                    desc=f"Predicting {total_sequence_number} sequences x {len(self._target_names)} targets",
+                    total=len(futures),
+                    leave=True,
+                ):
+                    seq, target = futures[future]
+                    try:
+                        output_df = future.result()
+                        per_target_preds[target][seq] = output_df
+                    except Exception as exc:
+                        logger.error(
+                            f"Sequence {seq} for target {target} generated an exception: {exc}"
+                        )
+                        raise exc
 
             preds = []
             for sequence_number in range(total_sequence_number):

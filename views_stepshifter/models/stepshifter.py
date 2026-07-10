@@ -5,6 +5,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 from darts import TimeSeries
+from sklearn.base import BaseEstimator
 from sklearn.utils.validation import check_is_fitted
 from typing import List, Dict, Optional, Tuple
 from views_stepshifter.models.validation import views_validate
@@ -17,7 +18,7 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-class StepshifterModel:
+class StepshifterModel(BaseEstimator):
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         self._config = config
         self._steps = config["steps"]
