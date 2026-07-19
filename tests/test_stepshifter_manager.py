@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from views_stepshifter.manager.stepshifter_manager import StepshifterManager
+from views_stepshifter.infrastructure.exceptions import PreContractArtifactError
 from views_pipeline_core.managers.model import ModelPathManager
 from views_pipeline_core.cli.args import ForecastingModelArgs
 
@@ -353,6 +354,57 @@ def test_forecast_model_artifact(stepshifter_manager):
         path_artifact = stepshifter_manager._model_path.artifacts / artifact_name
         assert path_artifact == Path("/path/to/artifacts/non_default_artifact.pkl")
         mock_logger.exception.assert_called_once_with(f"Model artifact not found at {path_artifact}")
+
+def test_load_guard_rejects_pre_contract_artifact_on_evaluate(stepshifter_manager):
+    """ADR-003 E2: an artifact missing `_target_transform_name` (a pre-contract
+    artifact) has an unknown prediction scale and MUST fail loud on load — never be
+    silently assumed to be raw space."""
+    # spec without `_target_transform_name` => hasattr(...) is False, unlike a bare MagicMock
+    pre_contract_model = MagicMock(spec=["predict"])
+    with patch("builtins.open", mock_open(read_data=b"mocked_data")), \
+        patch("pickle.load", MagicMock(return_value=pre_contract_model)):
+
+        args = ForecastingModelArgs(run_type="test_run_type", evaluate=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+
+        with pytest.raises(PreContractArtifactError):
+            stepshifter_manager._evaluate_model_artifact("test_eval_type", None)
+        # the guard fires before prediction is attempted
+        pre_contract_model.predict.assert_not_called()
+
+
+def test_load_guard_rejects_pre_contract_artifact_on_forecast(stepshifter_manager):
+    """Same E2 guard on the forecast path (`_forecast_model_artifact`)."""
+    pre_contract_model = MagicMock(spec=["predict"])
+    with patch("builtins.open", mock_open(read_data=b"mocked_data")), \
+        patch("pickle.load", MagicMock(return_value=pre_contract_model)):
+
+        args = ForecastingModelArgs(run_type="forecasting", forecast=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+
+        with pytest.raises(PreContractArtifactError):
+            stepshifter_manager._forecast_model_artifact(None)
+        pre_contract_model.predict.assert_not_called()
+
+
+def test_load_guard_accepts_stamped_artifact(stepshifter_manager):
+    """The guard checks for the *presence* of the stamp, not its value: a legitimate
+    artifact carrying a non-identity stamp (e.g. `log1p`) loads and predicts normally."""
+    stamped_model = MagicMock(spec=["predict", "_target_transform_name"])
+    stamped_model._target_transform_name = "log1p"
+    stamped_model.predict.return_value = ["mock_df"]
+    with patch("builtins.open", mock_open(read_data=b"mocked_data")), \
+        patch("pickle.load", MagicMock(return_value=stamped_model)), \
+        patch.object(StepshifterManager, "_get_standardized_df", return_value="standardized_df"):
+
+        args = ForecastingModelArgs(run_type="forecasting", forecast=True, saved=True)
+        stepshifter_manager.configs = vars(args)
+
+        result = stepshifter_manager._forecast_model_artifact(None)
+
+        stamped_model.predict.assert_called_once_with("forecasting")
+        assert result == "standardized_df"
+
 
 def test_evaluate_sweep(stepshifter_manager):
     """

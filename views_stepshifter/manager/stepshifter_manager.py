@@ -4,6 +4,7 @@ from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
 from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
+from views_stepshifter.infrastructure.exceptions import PreContractArtifactError
 import logging
 import pickle
 import pandas as pd
@@ -23,6 +24,30 @@ class StepshifterManager(ForecastingModelManager):
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
         self._is_shurf = self._config_meta["algorithm"] == "ShurfModel"
+
+    @staticmethod
+    def _guard_loaded_artifact(model: Any, path_artifact) -> None:
+        """ADR-003 E2 load-time guard.
+
+        A loaded artifact must declare the target-transform space it predicts in.
+        A pre-contract artifact (missing ``_target_transform_name``) has an unknown
+        prediction scale that cannot be safely inverted, so it is rejected loudly
+        rather than silently assumed to be raw space.
+
+        Note: the guard checks for the *presence* of the stamp, not its value — a
+        legitimate plain-model artifact may carry a non-identity transform (e.g.
+        ``log1p``) and must load fine.
+        """
+        if not hasattr(model, "_target_transform_name"):
+            msg = (
+                f"Model artifact at {path_artifact} predates the target-transform "
+                f"contract (ADR-003 E2): it carries no `_target_transform_name` stamp, "
+                f"so its prediction space is unknown and cannot be safely inverted. "
+                f"Re-train and re-save the artifact under the current contract before "
+                f"evaluating or forecasting."
+            )
+            logger.error(msg)
+            raise PreContractArtifactError(msg)
 
     @staticmethod
     def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -166,6 +191,8 @@ class StepshifterManager(ForecastingModelManager):
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
 
+        StepshifterManager._guard_loaded_artifact(stepshift_model, path_artifact)
+
         df_predictions = stepshift_model.predict(run_type, eval_type)
         df_predictions = [
             StepshifterManager._get_standardized_df(df) for df in df_predictions
@@ -208,6 +235,8 @@ class StepshifterManager(ForecastingModelManager):
         except FileNotFoundError:
             logger.exception(f"Model artifact not found at {path_artifact}")
             raise
+
+        StepshifterManager._guard_loaded_artifact(stepshift_model, path_artifact)
 
         df_prediction = stepshift_model.predict(run_type)
         df_prediction = StepshifterManager._get_standardized_df(df_prediction)
