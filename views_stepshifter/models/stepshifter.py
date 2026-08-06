@@ -34,9 +34,9 @@ class StepshifterModel(BaseEstimator):
         # Multiple targets handling
         if not isinstance(config["regression_targets"], list):
             raise ValueError("Dependent variable must be a list")
-        if len(config["targets"]) == 0:
+        if len(config["regression_targets"]) == 0:
             raise ValueError("Dependent variable list cannot be empty")
-        self._target_names = config["targets"]
+        self._target_names = config["regression_targets"]
         # Backward-compatible alias used in downstream tests and subclasses.
         self._targets = self._target_names[0]
 

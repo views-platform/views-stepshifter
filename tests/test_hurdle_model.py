@@ -99,7 +99,7 @@ def test_initialization(sample_config, sample_partitioner_dict):
     """The model initializes with the correct attributes."""
     model = HurdleModel(sample_config, sample_partitioner_dict)
     assert model._steps == sample_config["steps"]
-    assert model._targets == sample_config["targets"][0]
+    assert model._targets == sample_config["regression_targets"][0]
     assert model._clf_params == sample_config["parameters"]["clf"]
     assert model._reg_params == sample_config["parameters"]["reg"]
 
