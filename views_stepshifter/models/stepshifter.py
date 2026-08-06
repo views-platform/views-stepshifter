@@ -32,7 +32,7 @@ class StepshifterModel(BaseEstimator):
         self._past_cov_by_target: Dict[str, List[TimeSeries]] = {}
 
         # Multiple targets handling
-        if not isinstance(config["targets"], list):
+        if not isinstance(config["regression_targets"], list):
             raise ValueError("Dependent variable must be a list")
         if len(config["targets"]) == 0:
             raise ValueError("Dependent variable list cannot be empty")
