@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "views_stepshifter"
-version = "1.3.0"
+version = "1.5.0"
 description = ""
 authors = [
     "Xiaolong Sun <xiaolong.sun@pcr.uu.se>",
@@ -24,7 +24,8 @@ views_forecasts = "^0.5.5"
 xgboost = "^3.0.0"
 scipy = "1.15.1" # error with latest scipy 1.16.0. see https://github.com/statsmodels/statsmodels/issues?q=_lazywhere
 
-
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.3"
 
 [build-system]
 requires = ["poetry-core"]
