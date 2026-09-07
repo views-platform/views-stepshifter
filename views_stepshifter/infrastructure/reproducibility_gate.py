@@ -177,6 +177,16 @@ class ReproducibilityGate:
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
 
+            # D-26: deferred two-stage models operate in raw target space.
+            if algo in {"HurdleModel", "ShurfModel"} and target_transform != "identity":
+                msg = (
+                    "REPRODUCIBILITY CONTRACT VIOLATED: "
+                    f"{algo} requires target_transform='identity'; "
+                    f"got '{target_transform}'."
+                )
+                logger.error(msg)
+                raise MissingHyperparameterError(msg)
+
             # 6. ShurfModel log_target rule (D-27): keep the legacy log_target
             #    sampler disabled; scale should be controlled by target_transform
             #    and the model-boundary inverse only.

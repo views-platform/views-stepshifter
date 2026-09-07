@@ -19,7 +19,7 @@ from views_stepshifter.models.hurdle_model import HurdleModel
 def sample_config():
     return {
         "steps": [1, 2, 3],
-        "targets": ["target"],
+        "regression_targets": ["target"],
         "model_clf": "LGBMClassifier",
         "model_reg": "LGBMRegressor",
         "parameters": {"clf": {"n_estimators": 100, "max_depth": 10}, "reg": {}},
@@ -59,7 +59,7 @@ def fitted_hurdle():
     CI/CPU path locally — forcing CPU in-process while CUDA is initialized deadlocks on fork.)"""
     cfg = {
         "steps": [1, 2],
-        "targets": ["target"],
+        "regression_targets": ["target"],
         "model_clf": "LGBMClassifier",
         "model_reg": "LGBMRegressor",
         "parameters": {"clf": {"n_estimators": 5}, "reg": {"n_estimators": 5}},

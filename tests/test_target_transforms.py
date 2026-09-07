@@ -182,7 +182,7 @@ _PARTS = {"train": [0, 1], "test": [2, 3]}
 def _model(transform="log1p"):
     cfg = {
         "steps": [1, 2],
-        "targets": ["t"],
+        "regression_targets": ["t"],
         "parameters": {"n_estimators": 5},
         "sweep": False,
         "target_transform": transform,
@@ -216,7 +216,7 @@ def test_model_init_unknown_transform_raises():
 
 
 def test_model_init_missing_transform_raises():
-    cfg = {"steps": [1, 2], "targets": ["t"], "parameters": {}, "sweep": False}
+    cfg = {"steps": [1, 2], "regression_targets": ["t"], "parameters": {}, "sweep": False}
     with pytest.raises(KeyError):
         StepshifterModel(cfg, _PARTS)
 
@@ -281,7 +281,7 @@ def test_predict_routes_through_inverse_exactly_once_end_to_end(monkeypatch):
     )
     cfg = {
         "steps": [1, 2],
-        "targets": ["t"],
+        "regression_targets": ["t"],
         "parameters": {"n_estimators": 5, "n_jobs": 1},
         "sweep": False,
         "target_transform": "log1p",
@@ -321,7 +321,7 @@ from views_stepshifter.models.shurf_model import ShurfModel  # noqa: E402
 def _hurdle_model_cfg(transform="identity"):
     return {
         "steps": [1, 2],
-        "targets": ["t"],
+        "regression_targets": ["t"],
         "parameters": {"clf": {}, "reg": {}},
         "sweep": False,
         "target_transform": transform,
@@ -374,7 +374,7 @@ def test_hurdle_identity_fit_predict_produces_sane_raw_output():
     )
     cfg = {
         "steps": [1, 2],
-        "targets": ["t"],
+        "regression_targets": ["t"],
         "parameters": {"clf": {"n_estimators": 5}, "reg": {"n_estimators": 5}},
         "sweep": False,
         "target_transform": "identity",
@@ -420,7 +420,7 @@ def test_shurf_log_target_false_predict_is_finite_no_overflow():
     )
     cfg = {
         "steps": [1, 2],
-        "targets": ["t"],
+        "regression_targets": ["t"],
         "parameters": {"clf": {"n_estimators": 2}, "reg": {"n_estimators": 2}},
         "sweep": False,
         "target_transform": "identity",

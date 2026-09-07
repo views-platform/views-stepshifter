@@ -14,7 +14,7 @@ def config():
     """
     return {
         'steps': [1, 2],
-        'targets': ['target'],
+        'regression_targets': ['target'],
         'model_reg': 'RandomForestRegressor',
         'parameters': {'max_depth': 1, 'n_estimators': 100},
         'sweep': False,

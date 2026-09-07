@@ -26,7 +26,7 @@ def mock_config_meta():
     return {
         "name": "test_model",
         "algorithm": "LGBMRegressor",
-        "targets": "test_target",
+        "regression_targets": ["test_target"],
         "metrics": ["test_metric"]
     }
 
@@ -35,7 +35,7 @@ def mock_config_meta_hurdle():
     return {
         "name": "test_model",
         "algorithm": "HurdleModel",
-        "targets": "test_target",
+        "regression_targets": ["test_target"],
         "metrics": ["test_metric"],
         "model_clf": "LGBMClassifier",
         "model_reg": "LGBMRegressor"
@@ -93,9 +93,9 @@ def stepshifter_manager(mock_model_path, mock_config_meta, mock_config_deploymen
     """
     Provides a StepshifterManager instance for a non-hurdle model.
 
-    It patches _ModelManager__load_config to inject mock config dictionaries.
+    It patches _load_config to inject mock config dictionaries.
     """
-    with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
+    with patch.object(StepshifterManager, '_load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters,
@@ -115,9 +115,9 @@ def stepshifter_manager_hurdle(mock_model_path, mock_config_meta_hurdle, mock_co
     """
     Provides a StepshifterManager instance for a hurdle model.
 
-    It patches _ModelManager__load_config to inject mock config dictionaries.
+    It patches _load_config to inject mock config dictionaries.
     """
-    with patch.object(StepshifterManager, '_ModelManager__load_config', side_effect=lambda file, func: {
+    with patch.object(StepshifterManager, '_load_config', side_effect=lambda file, func: {
         "config_meta.py": mock_config_meta_hurdle,
         "config_deployment.py": mock_config_deployment,
         "config_hyperparameters.py": mock_config_hyperparameters_hurdle,

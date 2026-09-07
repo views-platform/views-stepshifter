@@ -34,9 +34,11 @@ class HurdleModel(StepshifterModel):
 
     def __init__(self, config: Dict, partitioner_dict: Dict[str, List[int]]):
         super().__init__(config, partitioner_dict)
-        # Two-stage models now use the same target-transform contract as the
-        # base stepshifter model: forward transform in fit() and inverse at
-        # prediction boundary.
+        if self._target_transform_name != "identity":
+            raise ValueError(
+                f"{self.__class__.__name__} requires target_transform='identity'; "
+                f"got '{self._target_transform_name}'"
+            )
         params = self._get_parameters(config)
         self._clf_params = params["clf"]
         self._reg_params = params["reg"]
