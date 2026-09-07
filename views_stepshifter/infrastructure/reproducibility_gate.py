@@ -177,28 +177,24 @@ class ReproducibilityGate:
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
 
-            # 6. Deferred-models rule (D-26): HurdleModel/ShurfModel carry their own
-            #    scattered transforms; they must train in raw space (identity) for now.
-            if algo in ("HurdleModel", "ShurfModel") and target_transform != "identity":
+            # D-26: deferred two-stage models operate in raw target space.
+            if algo in {"HurdleModel", "ShurfModel"} and target_transform != "identity":
                 msg = (
                     "REPRODUCIBILITY CONTRACT VIOLATED: "
-                    f"{algo} must declare target_transform='identity' "
-                    "(non-identity target transforms are deferred for two-stage models)."
+                    f"{algo} requires target_transform='identity'; "
+                    f"got '{target_transform}'."
                 )
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
 
-            # 7. ShurfModel log_target rule (D-27): ShurfModel is identity-pinned, so the
-            #    positive stage trains on the RAW target; the log_target=True sampler then
-            #    applies expm1 to that raw prediction -> float64 overflow -> inf. Require
-            #    log_target=False (the correct raw sampler). Re-enabling a safe log-space
-            #    sampling path is deferred (#71 / the ADR-003 split).
+            # 6. ShurfModel log_target rule (D-27): keep the legacy log_target
+            #    sampler disabled; scale should be controlled by target_transform
+            #    and the model-boundary inverse only.
             if algo == "ShurfModel" and config.get("log_target") is True:
                 msg = (
                     "REPRODUCIBILITY CONTRACT VIOLATED: "
-                    "ShurfModel must declare log_target=False — with the raw target, "
-                    "log_target=True overflows expm1 (D-27). Re-enabling a safe "
-                    "log-space sampling path is deferred (#71)."
+                    "ShurfModel must declare log_target=False; use target_transform "
+                    "for target scaling and boundary inverse instead."
                 )
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)

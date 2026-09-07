@@ -148,13 +148,13 @@ def test_manager_gate_rejects_incomplete_config(monkeypatch):
     meta = {
         "name": "test",
         "algorithm": "XGBRegressor",
-        "targets": "t",
+        "regression_targets": ["t"],
         "metrics": [],
     }
 
     with patch.object(
         StepshifterManager,
-        "_ModelManager__load_config",
+        "_load_config",
         side_effect=lambda file, func: {
             "config_meta.py": meta,
             "config_deployment.py": {"deployment_status": "s"},
