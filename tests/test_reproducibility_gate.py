@@ -17,7 +17,7 @@ def test_core_genome_is_list_of_strings():
 
 def test_algorithm_genomes_covers_all_supported_models():
     expected = {
-        "HurdleModel", "ShurfModel",
+        "HurdleModel", "ShurfModel", "DshurfModel",
         "XGBRegressor", "XGBRFRegressor",
         "LGBMRegressor",
     }
@@ -68,6 +68,23 @@ def test_audit_manifest_accepts_valid_shurf_config():
     ReproducibilityGate.Config.audit_manifest(config)
 
 
+def test_audit_manifest_accepts_valid_dshurf_config():
+    config = {
+        "algorithm": "DshurfModel",
+        "steps": [*range(1, 37)],
+        "time_steps": 36,
+        "target_transform": "identity",
+        "pred_samples": 10,
+        "log_target": False,
+        "hurdle_strategy": "probabilistic",
+        "parameters": {
+            "clf": {"n_estimators": 2},
+            "reg": {"n_estimators": 2},
+        },
+    }
+    ReproducibilityGate.Config.audit_manifest(config)
+
+
 def test_audit_manifest_rejects_missing_core_key():
     config = {
         "algorithm": "XGBRegressor",
@@ -107,6 +124,24 @@ def test_audit_manifest_rejects_missing_shurf_config_key():
         },
     }
     with pytest.raises(MissingHyperparameterError, match="pred_samples"):
+        ReproducibilityGate.Config.audit_manifest(config)
+
+
+def test_audit_manifest_rejects_missing_dshurf_config_key():
+    config = {
+        "algorithm": "DshurfModel",
+        "steps": [*range(1, 37)],
+        "time_steps": 36,
+        "target_transform": "identity",
+        "pred_samples": 10,
+        "log_target": False,
+        # missing hurdle_strategy
+        "parameters": {
+            "clf": {"n_estimators": 2},
+            "reg": {"n_estimators": 2},
+        },
+    }
+    with pytest.raises(MissingHyperparameterError, match="hurdle_strategy"):
         ReproducibilityGate.Config.audit_manifest(config)
 
 

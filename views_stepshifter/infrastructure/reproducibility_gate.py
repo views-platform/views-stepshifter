@@ -6,6 +6,7 @@ from .transforms import TRANSFORMS
 logger = logging.getLogger(__name__)
 
 
+
 class ReproducibilityGate:
     """
     Canonical hyperparameter contract for views-stepshifter models.
@@ -41,6 +42,14 @@ class ReproducibilityGate:
                     "log_target",
                     "draw_dist",
                     "draw_sigma",
+                ],
+            },
+            "DshurfModel": {
+                "parameter_keys": ["clf", "reg"],
+                "config_keys": [
+                    "pred_samples",
+                    "log_target",
+                    "hurdle_strategy"
                 ],
             },
             "XGBRegressor": {
@@ -178,7 +187,10 @@ class ReproducibilityGate:
                 raise MissingHyperparameterError(msg)
 
             # D-26: deferred two-stage models operate in raw target space.
-            if algo in {"HurdleModel", "ShurfModel"} and target_transform != "identity":
+            if (
+                algo in {"HurdleModel", "ShurfModel", "DshurfModel"}
+                and target_transform != "identity"
+            ):
                 msg = (
                     "REPRODUCIBILITY CONTRACT VIOLATED: "
                     f"{algo} requires target_transform='identity'; "
@@ -187,14 +199,18 @@ class ReproducibilityGate:
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
 
-            # 6. ShurfModel log_target rule (D-27): keep the legacy log_target
-            #    sampler disabled; scale should be controlled by target_transform
-            #    and the model-boundary inverse only.
-            if algo == "ShurfModel" and config.get("log_target") is True:
+            # 6. ShurfModel/DshurfModel log_target rule (D-27): keep the legacy
+            #    log_target sampler disabled; scale should be controlled by
+            #    target_transform and the model-boundary inverse only.
+            if (
+                algo in {"ShurfModel", "DshurfModel"}
+                and config.get("log_target") is True
+            ):
                 msg = (
                     "REPRODUCIBILITY CONTRACT VIOLATED: "
-                    "ShurfModel must declare log_target=False; use target_transform "
+                    f"{algo} must declare log_target=False; use target_transform "
                     "for target scaling and boundary inverse instead."
                 )
                 logger.error(msg)
                 raise MissingHyperparameterError(msg)
+

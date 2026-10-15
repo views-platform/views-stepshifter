@@ -121,6 +121,21 @@ def _shurf_config(**over):
     return cfg
 
 
+def _dshurf_config(**over):
+    cfg = {
+        "algorithm": "DshurfModel",
+        "steps": [1, 2, 3],
+        "time_steps": 3,
+        "pred_samples": 10,
+        "log_target": False,
+        "hurdle_strategy": "probabilistic",
+        "parameters": {"clf": {"n_estimators": 2}, "reg": {"n_estimators": 2}},
+        "target_transform": "identity",
+    }
+    cfg.update(over)
+    return cfg
+
+
 @pytest.mark.parametrize("tname", ALL)
 def test_gate_accepts_each_registered_transform(tname):
     _audit(_xgb_config(target_transform=tname))
@@ -143,7 +158,8 @@ def test_gate_rejects_missing_transform():
         _audit(cfg)
 
 
-# Deferred-models rule (D-26): HurdleModel/ShurfModel must be identity only.
+# Deferred-models rule (D-26): HurdleModel/ShurfModel/DshurfModel must be
+# identity only.
 
 def test_gate_accepts_hurdle_with_identity():
     _audit(_hurdle_config())
@@ -151,6 +167,10 @@ def test_gate_accepts_hurdle_with_identity():
 
 def test_gate_accepts_shurf_with_identity():
     _audit(_shurf_config())
+
+
+def test_gate_accepts_dshurf_with_identity():
+    _audit(_dshurf_config())
 
 
 @pytest.mark.parametrize("tname", ["log1p", "asinh"])
@@ -163,6 +183,12 @@ def test_gate_rejects_hurdle_with_nonidentity(tname):
 def test_gate_rejects_shurf_with_nonidentity(tname):
     with pytest.raises(MissingHyperparameterError, match="identity"):
         _audit(_shurf_config(target_transform=tname))
+
+
+@pytest.mark.parametrize("tname", ["log1p", "asinh"])
+def test_gate_rejects_dshurf_with_nonidentity(tname):
+    with pytest.raises(MissingHyperparameterError, match="identity"):
+        _audit(_dshurf_config(target_transform=tname))
 
 
 # -----------------------------------------------------------------------
@@ -316,6 +342,7 @@ def test_predict_routes_through_inverse_exactly_once_end_to_end(monkeypatch):
 
 from views_stepshifter.models.hurdle_model import HurdleModel  # noqa: E402
 from views_stepshifter.models.shurf_model import ShurfModel  # noqa: E402
+from views_stepshifter.models.dshurf_model import DshurfModel  # noqa: E402
 
 
 def _hurdle_model_cfg(transform="identity"):
@@ -340,12 +367,26 @@ def _shurf_model_cfg(transform="identity"):
     return cfg
 
 
+def _dshurf_model_cfg(transform="identity"):
+    cfg = _hurdle_model_cfg(transform)
+    cfg.update(
+        pred_samples=2,
+        log_target=False,
+        hurdle_strategy="probabilistic",
+    )
+    return cfg
+
+
 def test_hurdle_model_accepts_identity():
     HurdleModel(_hurdle_model_cfg("identity"), _PARTS)
 
 
 def test_shurf_model_accepts_identity():
     ShurfModel(_shurf_model_cfg("identity"), _PARTS)
+
+
+def test_dshurf_model_accepts_identity():
+    DshurfModel(_dshurf_model_cfg("identity"), _PARTS)
 
 
 @pytest.mark.parametrize("t", ["log1p", "asinh"])
@@ -358,6 +399,12 @@ def test_hurdle_model_rejects_nonidentity_transform(t):
 def test_shurf_model_rejects_nonidentity_transform(t):
     with pytest.raises(ValueError, match="identity"):
         ShurfModel(_shurf_model_cfg(t), _PARTS)
+
+
+@pytest.mark.parametrize("t", ["log1p", "asinh"])
+def test_dshurf_model_rejects_nonidentity_transform(t):
+    with pytest.raises(ValueError, match="identity"):
+        DshurfModel(_dshurf_model_cfg(t), _PARTS)
 
 
 def test_hurdle_identity_fit_predict_produces_sane_raw_output():
@@ -405,6 +452,17 @@ def test_gate_rejects_shurf_with_log_target_true():
 
 def test_gate_accepts_shurf_with_log_target_false():
     _audit(_shurf_config(log_target=False))
+
+
+def test_gate_rejects_dshurf_with_log_target_true():
+    """D-27 applies to DshurfModel: log_target stays a declared-but-unused
+    attribute; a future log-space path must not be silently enabled."""
+    with pytest.raises(MissingHyperparameterError, match="log_target"):
+        _audit(_dshurf_config(log_target=True))
+
+
+def test_gate_accepts_dshurf_with_log_target_false():
+    _audit(_dshurf_config(log_target=False))
 
 
 def test_shurf_log_target_false_predict_is_finite_no_overflow():

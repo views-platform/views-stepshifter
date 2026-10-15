@@ -3,6 +3,7 @@ from views_pipeline_core.files.utils import read_dataframe, generate_model_file_
 from views_stepshifter.models.stepshifter import StepshifterModel
 from views_stepshifter.models.hurdle_model import HurdleModel
 from views_stepshifter.models.shurf_model import ShurfModel
+from views_stepshifter.models.dshurf_model import DshurfModel
 from views_stepshifter.infrastructure.reproducibility_gate import ReproducibilityGate
 import logging
 import pickle
@@ -23,6 +24,7 @@ class StepshifterManager(ForecastingModelManager):
         super().__init__(model_path, wandb_notifications, use_prediction_store)
         self._is_hurdle = self._config_meta["algorithm"] == "HurdleModel"
         self._is_shurf = self._config_meta["algorithm"] == "ShurfModel"
+        self._is_dshurf = self._config_meta["algorithm"] == "DshurfModel"
 
     @staticmethod
     def _get_standardized_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -90,6 +92,8 @@ class StepshifterManager(ForecastingModelManager):
             model = HurdleModel(self.configs, partitioner_dict)
         elif self._is_shurf:
             model = ShurfModel(self.configs, partitioner_dict)
+        elif self._is_dshurf:
+            model = DshurfModel(self.configs, partitioner_dict)
         else:
             self.configs = {"model_reg": self.configs["algorithm"]}
             model = StepshifterModel(self.configs, partitioner_dict)
@@ -112,7 +116,7 @@ class StepshifterManager(ForecastingModelManager):
 
         path_artifacts = self._model_path.artifacts
         # W&B does not directly support nested dictionaries for hyperparameters
-        if self.configs["sweep"] and (self._is_hurdle or self._is_shurf):
+        if self.configs["sweep"] and (self._is_hurdle or self._is_shurf or self._is_dshurf):
             self.configs = self._split_hurdle_parameters()
 
         run_type = self.configs["run_type"]
