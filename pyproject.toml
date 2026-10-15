@@ -23,6 +23,12 @@ lightgbm = "4.6.0"
 views_forecasts = "^0.5.5"
 xgboost = "^3.0.0"
 scipy = "1.15.1" # error with latest scipy 1.16.0. see https://github.com/statsmodels/statsmodels/issues?q=_lazywhere
+xarray = "2024.3.0"
+ngboost = "0.5.11"
+quantile-forest = "1.4.2"
+# binds to the system R binary; the DRF backend additionally requires R
+# and the CRAN "drf" package available in the environment
+rpy2 = "3.6.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.3"
