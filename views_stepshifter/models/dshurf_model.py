@@ -4,7 +4,9 @@ import os
 from views_pipeline_core.managers.model import ForecastingModelManager
 from views_stepshifter.models import StepshifterModel
 from views_stepshifter.models.validation import views_validate
+from views_stepshifter.models.dummies import dummy_predict
 from sklearn.utils.validation import check_is_fitted
+from sklearn.impute import SimpleImputer
 import pandas as pd
 from typing import List, Dict, Literal, Optional, Tuple, TYPE_CHECKING
 import numpy as np
@@ -57,6 +59,7 @@ PREDICTION_WRAPPERS = {
     "NGBoostRegressor": ngb_predict,
     "RandomForestQuantileRegressor": qrf_predict,
     "DistributionalRandomForestRegressor": drf_predict,
+    "DummyDistributionalRegressor": dummy_predict,
 }
 
 def _parallel_worker(model_instance, seq, target):
@@ -118,12 +121,15 @@ class DshurfModel(StepshifterModel):
             case "XGBClassifier":
                 from xgboost import XGBClassifier
                 return XGBClassifier
-            case "XGBRFClassifier":
-                from xgboost import XGBRFClassifier
-                return XGBRFClassifier
+            case "RandomForestClassifier":
+                from sklearn.ensemble import RandomForestClassifier
+                return RandomForestClassifier
             case "LGBMClassifier":
                 from lightgbm.sklearn import LGBMClassifier
                 return LGBMClassifier
+            case "DummyClassifier":
+                from views_stepshifter.models.dummies import PriorDummyClassifier
+                return PriorDummyClassifier
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid classifier model or is not supported now. "
@@ -151,6 +157,9 @@ class DshurfModel(StepshifterModel):
                     DistributionalRandomForestRegressor,
                 )
                 return DistributionalRandomForestRegressor
+            case "DummyDistributionalRegressor":
+                from views_stepshifter.models.dummies import EmpiricalDummyRegressor
+                return EmpiricalDummyRegressor
             case _:
                 raise ValueError(
                     f"Model {func_name} is not a valid forecasting model or is not supported now. "
@@ -208,6 +217,7 @@ class DshurfModel(StepshifterModel):
             (t >= month_first + step)
             & (t >= self._train_start)
             & (t <= self._train_end)
+            & y.notna()
         )
         X_step, y_step = X.loc[keep], y.loc[keep]
 
@@ -240,6 +250,7 @@ class DshurfModel(StepshifterModel):
         ``_models_by_target[target][step]`` for ``predict_sequence``.
         """
         df = self._process_data(df)
+        df[self._independent_variables] = SimpleImputer(strategy="median").fit_transform(df[self._independent_variables])
         self._df_processed = df
         self._clf = self._resolve_clf_model(self._config["model_clf"])
         self._reg = self._resolve_distreg_model(self._config["model_reg"])
@@ -250,7 +261,7 @@ class DshurfModel(StepshifterModel):
             hurdle_component_models = {}
             for (
                 step
-            ) in self._steps:
+            ) in tqdm(self._steps, desc=f"fits for {target}"):
                 X_step, y_step = self._prepare_X_y_step(step, target)
 
                 clf_model = self._clf(**self._clf_params)
@@ -559,12 +570,7 @@ class DshurfModel(StepshifterModel):
                 target: [None] * total_sequence_number for target in self._target_names
             }
             with ProcessPoolExecutor(
-                max_workers=min(len(tasks), os.cpu_count()),  # temporary, for easier debugging
-                # "spawn" is required, not an optimization: the default
-                # "fork" context deadlocks when a forked child calls a
-                # fitted XGBoost estimator (OpenMP thread pool state does
-                # not survive fork). LightGBM is unaffected, which is why
-                # the Hurdle/Shurf pools work with the default context.
+                max_workers=min(len(tasks), os.cpu_count()),
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 futures = {
